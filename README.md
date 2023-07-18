@@ -56,16 +56,12 @@ You can pass several solve options to the command line, options which are also s
 |`--help`, `-h`| Display help |
 
 ## File formats
-The input mesh may be an `obj`, `ply`, `off`, or `stl`.
-TODO: check this
+The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-central website](https://geometry-central.net/surface/utilities/io/#reading-meshes) for up-to-date information on supported file types.
 
 The input curve can be specified either as a discrete _1-chain_ or a _dual 1-chain_. Specifying the curve as a 1-chain encodes the curve with _tangential orientation_, while a dual 1-chain encodes _normal orientation_. Using a dual 1-chain is only necessary if the surface is non-orientable.
 
-// Ordinarily, we assume that jumps increase in the direction
-obtained by rotating the tangent 90 degrees counter-clockwise. On
-a nonorientable surface, however, there is no consistent notion
-of counter-clockwise—even though curves can still meaningfully
-bound regions
+<!-- Ordinarily, we assume that jumps increase in the direction obtained by rotating the tangent 90 degrees counter-clockwise. On
+a nonorientable surface, however, there is no consistent notion of counter-clockwise—even though curves can still meaningfully bound regions -->
 
 ## Homogenous texture coordinates
 
@@ -77,7 +73,7 @@ By default, we output texture coordinates in _homogeneous coordinates_, where ra
 
 The `render/` directory contains an example Blender file (`Example.blend`) that can load and visualize meshes and curves, with the SWN solution. 
 
-// The blender file should open to a Python script in the `Scripting` workspace. You can load your own uniformized mesh by changing the mesh name in the script and clicking on `Run Script`. This will load your model and apply a correctly-interpolated checkerboard texture.
+<!-- The blender file should open to a Python script in the `Scripting` workspace. You can load your own uniformized mesh by changing the mesh name in the script and clicking on `Run Script`. This will load your model and apply a correctly-interpolated checkerboard texture. -->
 
 ![Screenshot of the provided Blender file](media/BlenderFile.png)
 TODO: example Blender file
