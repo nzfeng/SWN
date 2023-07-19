@@ -39,144 +39,105 @@ class SurfaceWindingNumbersSolver {
 
   public:
     // === Constructor
-    SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom);
+    SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom, bool doHomologyCorrection = true,
+                                bool approximateResidual = false);
 
     // === Solve
-    CornerData<double> solve(const std::vector<Halfedge>& curve, bool doHomologyCorrection = true,
-                             bool useSpecialBases = true);
 
-    VertexData<double> solve(const std::vector<BarycentricVector>& curve, bool doHomologyCorrection = true,
-                             bool useWhitneyElements = false);
+    /* Curve(s) is specified as a primal 1-chain. Edges of the curve that pass through non-manifold vertices are
+     * omitted. (If this is undesirable, consider using a dual 1-chain; see below.)
+     */
+    CornerData<double> solve(const Vector<double>& primalChain);
 
-    VertexData<double> solve(const std::vector<SurfacePoint>& curveNodes,
-                             const std::vector<std::array<size_t, 2>>& curveEdges, bool doHomologyCorrection = true,
-                             bool useWhitneyElements = false);
+    /* Curve(s) is specified as an unordered collection of oriented mesh edges. */
+    CornerData<double> solve(const std::vector<Halfedge>& curve);
 
-    // === Edit parameters
-    void setEpsilon(double epsilon);
+    /* Curve is specified as an ordered sequence of mesh vertices. */
+    CornerData<double> solve(const std::vector<Vertex>& curve) const;
+
+    /* Multiple curves are specified as ordered sequences of vertices. */
+    CornerData<double> solve(const std::vector<std::vector<Vertex>>& curves) const;
+
+    /* Curve(s) is specified as a *dual* 1-chain, where each edge of the curve is specified as a pair of dual vertices
+     * (mesh faces) indicating an oriented dual edge from the first face to the second.
+     *
+     * Specifying the curve as a dual 1-chain is the only method that achieves full generality, in that it can be used
+     * to un-ambiguously specify the curve's sides and orientations on non-manifold or non-orientable meshes. */
+    CornerData<double> solve(const std::vector<std::array<Face, 2>>& curve) const;
+
+    /* Curve(s) is specified as an unordered collection of edges between barycentric points on the mesh.
+     *
+     * If mutateMesh = true, the mesh is re-meshed so that the curve conforms to mesh edges. Otherwise, the jump Laplace
+     * equation is solved using a Poisson formulation, but homology correction is no longer possible.
+     */
+    CornerData<double> solve(const std::vector<SurfacePoint>& curveNodes,
+                             const std::vector<std::array<size_t, 2>>& curveEdges, bool mutateMesh = true) const {}
+
+    // === Parameters
+    double epsilon = 1e-2;
+    bool doHomologyCorrection = true;
+    bool approximateResidual = true;
 
   private:
     // === Members
     SurfaceMesh& mesh;
     IntrinsicGeometryInterface& geom;
 
-    double EPSILON = 1e-2;
     double SPECIAL_VAL = std::numeric_limits<double>::quiet_NaN();
-    bool USE_SPECIAL_BASES = true;
 
-    // === Curve data
-    std::vector<Halfedge> curveHalfedges;        // the curve, represented as a set of halfedges
-    std::vector<BarycentricVector> curveVectors; // the curve, represented as a set of BarycentricVectors
+    bool simplyConnected;
 
     // === Solvers
-    // factors the standard cotan Laplacian
-    std::unique_ptr<PositiveDefiniteSolver<double>> cotanLaplaceSolver;
     // the 2-form Laplacian used to get co-exact component of a primal 1-form
     std::unique_ptr<PositiveDefiniteSolver<double>> coexactSolver;
-    std::unique_ptr<PositiveDefiniteSolver<double>> crouzeixRaviartPoissonSolver; // use Crouzeix-Raviart elements
-    std::unique_ptr<PositiveDefiniteSolver<double>> poissonSolver;                // use Whitney elements
 
     // === DEC operators used throughout
     SparseMatrix<double> d0, d0T, hodge1, hodge1Inv, d1, d1T;
-    HalfedgeData<double> halfedgeCotanWeights;
 
-    // === Helpers, utility / auxiliary functions
-    Vector<double> shiftVector(const Vector<double>& v) const;
-    Eigen::SparseMatrix<double, Eigen::RowMajor> convertToRowMajor(const SparseMatrix<double>& M) const;
-    void shiftWedgeVectorByAverageValueAlongCurves(Vector<double>& wedgeVals,
-                                                   const std::vector<Eigen::Triplet<double>>& jumpPairs) const;
-    void shiftToGetIntegers(Vector<double>& u_wedges, const std::vector<Eigen::Triplet<double>>& jumpPairs) const;
-    Vector<double> shiftToGetIntegers(const size_t& N, const CornerData<double>& u_corners,
-                                      const std::vector<Eigen::Triplet<double>>& jumpPairs,
-                                      const CornerData<size_t>& wedgeIndices) const;
-    double averageJumpValueAlongAllCurves(Vector<double>& wedgeVals,
-                                          const std::vector<Eigen::Triplet<double>>& jumpPairs) const;
-    double interpolateCornerData(const CornerData<double>& cornerVals, Face f) const;
-    bool isValidWedgeIndex(size_t wIdx) const;
-    bool isCurveClosed(const std::vector<Halfedge>& curve);
-    Vector<double> convertToChain(const std::vector<Halfedge>& curve);
-    Vector<double> cornerVector(const Vector<double>& v, const CornerData<size_t>& wedgeIndices);
-    std::vector<BarycentricVector> gradient(const Vector<double>& omega);
+    // === Algorithm steps
+    CornerData<double> computeReducedCoordinates(const Vector<double>& chain,
+                                                 const std::vector<Vertex>& interiorVertices,
+                                                 const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve) const;
 
-    std::vector<double> computeJumpLengths(const std::vector<Eigen::Triplet<double>>& jumpPairs,
-                                           const std::vector<Eigen::Triplet<double>>& jumpPairsDedup,
-                                           const CornerData<size_t>& wedgeIndices,
-                                           const std::vector<Vertex>& bVertices);
+    CornerData<double> solveJumpEquation(const std::vector<Vertex>& interiorVertices,
+                                         const VertexData<bool>& isInteriorEndpoint,
+                                         const CornerData<double>& reducedCoordinates) const;
 
-    std::vector<Halfedge> dijkstraCancelBoundary(const std::vector<Halfedge>& curve);
-    std::vector<Halfedge> dijkstraCompleteCurve(const std::vector<Halfedge>& curve);
+    Vector<double> DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint) const;
 
-    std::vector<Halfedge> completeCurve(const std::vector<Halfedge>& curve, const Vector<double>& gamma);
+    SparseMatrix<double> buildLaplacian(const VertexData<bool>& isInteriorEndpoint, const VertexData<size_t>& DOFindex,
+                                        const size_t& nDOFs) const;
 
-    void ensureHaveCotanLaplaceSolver();
-    void ensureHaveHodgeDecompositionSolvers();
-    Vector<double> computeExactComponent(const Vector<double>& omega);
-    Vector<double> computeCoExactComponent(const Vector<double>& omega);
+    Vector<double> buildJumpLaplaceRHS(const std::vector<Vertex>& interiorVertices,
+                                       const VertexData<bool>& isInteriorEndpoint,
+                                       const CornerData<double>& reducedCoordinates, const VertexData<size_t>& DOFindex,
+                                       const size_t& nDOFs) const;
 
-    VertexData<double> edgeMidpointDataToVertexData(const Vector<double>& u);
-    std::vector<BarycentricVector>
-    convertCurveToBarycentricVectors(const std::vector<SurfacePoint>& curveNodes,
-                                     const std::vector<std::array<size_t, 2>>& curveEdges) const;
+    Vector<double> harmonicComponent(const Vector<double>& omega) const;
 
-    // void ensureHaveLaplaceSolver();
-    void ensureHaveCrouzeixRaviartPoissonSolver();
-    void ensureHavePoissonSolver();
+    CornerData<double> residualFunction(const Vector<double>& gamma) const;
 
-    // === Functions for solving the Poisson equation
-    void discretizeSegmentInWhitneyBasis(const BarycentricVector& seg, Vector<double>& N_Gamma);
-    void discretizeSegmentInCrouzeixRaviartBasis(const BarycentricVector& seg, Vector<double>& N_Gamma);
+    CornerData<double> integrateLocally(const Vector<double>& gamma) const;
 
-    Vector<double> discretizeRHS(bool useWhitneyElements);
-    // Solve on input mesh using Whitney elements.
-    VertexData<double> solvePoissonEquation();
-    // Solve on input using Crouzei-Raviart elements.
-    VertexData<double> solveCrouzeixRaviartPoissonEquation();
+    CornerData<double> solveLinearProgram(const CornerData<double>& vInit) const;
 
-    // === Functions for solving the jump equation
-    CornerData<size_t> indexWedges(const std::vector<Halfedge>& curve, size_t& iN, size_t& N,
-                                   std::vector<Eigen::Triplet<double>>& wedgePairs, std::vector<Vertex>& bVertices,
-                                   std::vector<Vertex>& curveEndpoints, bool useSpecialBases = true);
-    std::vector<Eigen::Triplet<double>> computeCumulativeJumps(const std::vector<Halfedge>& curve,
-                                                               const std::vector<Vertex>& bVertices,
-                                                               const CornerData<size_t>& wedgeIndices);
+    CornerData<double> approximateResidualFunction(const Vector<double>& gamma,
+                                                   const std::vector<Halfedge>& curve) const;
 
-    CornerData<double> solveJumpEquation(const size_t& N, const std::vector<Eigen::Triplet<double>>& jumpPairs,
-                                         const std::vector<Eigen::Triplet<double>>& qJumpPairs,
-                                         const CornerData<size_t>& wedgeIndices,
-                                         const std::vector<Vertex>& curveEndpoints);
+    CornerData<double> subtractJumpDerivative(const std::vector<Vertex>& interiorVertices,
+                                              const VertexData<bool>& isInteriorEndpoint,
+                                              const CornerData<double>& resid,
+                                              const CornerData<double>& reducedCoordinates) const;
 
-    Vector<double> computeOmega(const CornerData<double>& u, const std::vector<Vertex>& curveEndpoints);
+    // === Auxiliary functions
 
-    void computeOmegaAndHodgeDecomposition(const CornerData<double>& u, const std::vector<Vertex>& curveEndpoints,
-                                           Vector<double>& omega, Vector<double>& dAlpha, Vector<double>& deltaBeta,
-                                           Vector<double>& gamma);
-    std::vector<Eigen::Triplet<double>> getFinalJumps(const std::vector<Eigen::Triplet<double>>& jumpPairs,
-                                                      const CornerData<double>& v_corners,
-                                                      const CornerData<size_t>& wedgeIndices, size_t N) const;
+    void ensureHaveCoexactSolver();
 
-    Vector<double> computeIntegratedDivergenceOverBoundaryCells(const Vector<double>& gamma,
-                                                                const std::vector<Vertex>& bVertices,
-                                                                const CornerData<size_t>& wedgeIndices, size_t N) const;
-    Vector<double> computeIntegratedDivergence(const Vector<double>& omega, const CornerData<size_t>& wedgeIndices,
-                                               size_t N) const;
-    Vector<double> computeIntegratedDivergence(const HalfedgeData<double>& omega,
-                                               const CornerData<size_t>& wedgeIndices, size_t N) const;
+    Vector<double> computeCoExactComponent(const Vector<double>& omega) const;
 
-    CornerData<double> integrateExactly(const Vector<double>& gamma, std::vector<Halfedge>& branchCut);
+    // === Utility functions
 
-    std::vector<std::pair<size_t, double>> matchUpJumpPairs(const std::vector<Eigen::Triplet<double>>& jumpPairs_u,
-                                                            const CornerData<size_t>& wedgeIndices_u, const size_t& N_u,
-                                                            const std::vector<Eigen::Triplet<double>>& jumpPairs_v,
-                                                            const CornerData<size_t>& wedgeIndices_v,
-                                                            const size_t& N_v);
+    Vector<double> convertToChain(const std::vector<Halfedge>& curve) const;
 
-    Vector<double> integrateGammaAndMinimizeJumpsL1(const std::vector<Halfedge>& completedCurve,
-                                                    const Vector<double>& gamma, CornerData<size_t>& wedgeIndices_v);
-
-    CornerData<double> integrateExactlyBranchCutAnywhere(const Vector<double>& gamma,
-                                                         const std::vector<Halfedge>& curve);
-
-    CornerData<double> reducedLinearProgram(const Vector<double>& gamma, const std::vector<Halfedge>& curve);
-
-    CornerData<double> integrateExactlyPerFace(const Vector<double>& gamma, const FaceData<double>& shiftPerFace);
+    Vector<double> convertToChain(const std::vector<Vertex>& curve) const;
 };
