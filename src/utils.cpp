@@ -61,6 +61,8 @@ void readLines(const SurfaceMesh& mesh, const std::string& filepath, std::vector
                     curveEdges.push_back({M + i, M + (i + 1)});
                 }
                 curveNodes.insert(curveNodes.back(), nodes.begin(), nodes.end());
+            } else if (X == "#offset") {
+                iss >> offset;
             }
         }
         curr_file.close();
@@ -120,6 +122,8 @@ void readCurves(const SurfaceMesh& mesh, const std::string& filepath, std::vecto
                 for (size_t i = 0; i < N - 1; i++) {
                     curveEdges.push_back({indices[i], indices[i + 1]});
                 }
+            } else if (X == "#offset") {
+                iss >> offset;
             }
         }
         curr_file.close();
