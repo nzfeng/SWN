@@ -9,6 +9,7 @@
 #include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
 
+#include "polyscope/curve_network.h"
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
 
@@ -21,6 +22,14 @@ int roundToNearestInteger(double x);
 // ===================== I/O
 
 Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
+
+/* Read in curve, encoded as OBJ line objects. */
+void readLines(const SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
+               std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
+
+/* Read in curve data (from a file NOT containing mesh data), encoded as segments between barycentric points. */
+void readCurves(const SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
+                std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
 
 // write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
 // loops)
@@ -56,3 +65,6 @@ Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
 //                                                                  curveHalfedgesOnManifold);
 
 // ===================== VISUALIZATION
+
+void displayCurves(const VertexPositionGeometry& geometry, const std::vector<SurfacePoint>& curveNodes,
+                   const std::vector<std::array<size_t, 2>>& curveEdges);

@@ -49,8 +49,9 @@ You can pass several solve options to the command line, options which are also s
 
 |flag | purpose|
 | ------------- |-------------|
-|`--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates|
-|`--doHomologyCorrection`=true| Correct for nonbounding curve components|
+|`--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates |
+|`--doHomologyCorrection`=true| Correct for nonbounding curve components |
+|`--allowRemeshing`=true| Allow the input surface mesh to be re-meshed |
 |`--viz`| Show the GUI |
 |`--version`, `-v`| Version info |
 |`--help`, `-h`| Display help |
@@ -68,6 +69,14 @@ a nonorientable surface, however, there is no consistent notion of counter-clock
 For better visualization of the solution around curve endpoints, we perform projective interpolation (see Figure 4 from the paper.) 
 
 By default, we output texture coordinates in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures you can interpolate the 3d coordinates linearly across each triangle. Then, for each pixel you perform a homogeneous divide, dividing the first two coordinates by the last coordinate to obtain the final uv texture coordinates. This can be done e.g. in a shader or via shader nodes in Blender (see `Example.blend` for an example).
+
+## Remeshing
+
+Depending on the curve input, the surface may need to be re-meshed for optimal output.
+
+SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but homology correction is no longer possible.
+
+Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. If `--allowRemeshing=true`, such edges will be subdivided so that these parts of the curve will not be ignored.
 
 # Visualization
 

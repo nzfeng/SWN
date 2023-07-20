@@ -29,22 +29,22 @@ using namespace geometrycentral::surface;
 std::unique_ptr<SurfaceMesh> mesh;
 std::unique_ptr<VertexPositionGeometry> geometry;
 
-// intrinsic triangulation stuff
+// == intrinsic triangulation stuff
 std::unique_ptr<ManifoldSurfaceMesh> manifoldMesh;
 std::unique_ptr<VertexPositionGeometry> manifoldGeom;
 std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation> intTri;
 
-// Polyscope stuff
+// == Polyscope stuff
 polyscope::SurfaceMesh* psMesh;
 polyscope::SurfaceMesh* psCsMesh; // common subdivision
 polyscope::SurfaceGraphQuantity* intEdgeQ;
 
-// The SWN solver
+// == the SWN solver
 std::unique_ptr<SurfaceWindingNumbersSolver> SWNSolver;
 
-// Parameters
+// == parameters
 std::string MESHNAME = "input mesh";
-std::string MESHNAME = "input mesh";
+std::string MESH_FILEPATH, CURVE_FILEPATH;
 enum SolverMode { OriginalMesh = 0, IntrinsicMesh };
 int SOLVER_MODE = SolverMode::OriginalMesh;
 bool DO_HOMOLOGY_CORRECTION = true;
@@ -55,6 +55,10 @@ bool USING_MANIFOLD_MESH = false; // if using the re-meshed (manifold) mesh
 bool USE_SPECIAL_BASES = true;
 int MAX_EDGE_SPLITS = 3;
 
+// == curve data
+std::vector<SurfacePoint> CURVE_NODES;
+std::vector<std::array<size_t, 2>> CURVE_EDGES;
+std::vector<Halfedge> CURVE_HALFEDGES;
 std::vector<Halfedge> curveHalfedgesOnManifold;
 std::vector<Halfedge> curveHalfedgesOnIntrinsic;
 
@@ -152,9 +156,10 @@ int main(int argc, char** argv) {
     }
 
     // Load mesh
-    std::string loadedFilename = args::get(inputFilename);
-    MESH_FILEPATH = loadedFilename;
-    std::tie(mesh, geometry) = readSurfaceMesh(loadedFilename);
+    MESH_FILEPATH = args::get(inputFilename);
+    std::tie(mesh, geometry) = readSurfaceMesh(MESH_FILEPATH);
+    // Read line objects, if they exist in mesh file.
+    readLines(*mesh, MESH_FILEPATH, CURVE_NODES, CURVE_EDGES);
 
     // Initialize polyscope
     polyscope::init();
@@ -165,68 +170,66 @@ int main(int argc, char** argv) {
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
 
     // Register the mesh with polyscope
-    MESHNAME = polyscope::guessNiceNameFromPath(loadedFilename);
+    MESHNAME = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
     psMesh = polyscope::registerSurfaceMesh(MESHNAME, geometry->inputVertexPositions, mesh->getFaceVertexList(),
                                             polyscopePermutations(*mesh));
 
-    // TODO: Read curve.
+    // Read curve.
     if (curveFilename) {
-        std::string curveFilepath = args::get(curveFilename);
-        CURVE_FILEPATH = curveFilepath;
-        std::cerr << "Reading input curves..." << std::endl;
-        readInputCurves(*mesh, curveFilepath, curveNodes, inputCurveEdges, curveEdges, curveHalfedges, MARKED_EDGES);
-        std::cerr << "Setting input halfedges..." << std::endl;
-        if (curveHalfedges.size() == 0) curveHalfedges = setCurveHalfedges(curveNodes, curveEdges, true);
-        std::cerr << curveHalfedges.size() << std::endl;
-        if (curveNodes.size() + inputCurveEdges.size() + curveEdges.size() + curveHalfedges.size() != 0) {
-            if (mesh->isManifold()) {
-                HERE();
-                // std::cerr << "Remeshing if necessary..." << std::endl;
-                // bool wasRemeshed = remeshIfNecessary();
-                // std::cerr << "Splitting edges if necessary..." << std::endl;
-                // if (wasRemeshed) {
-                //     std::cerr << "mesh split along curve" << std::endl;
-                //     splitEdgesIfNecessary(curveHalfedgesOnManifold);
-                //     std::cerr << manifoldMesh->nVertices() << " " << manifoldMesh->nEdges() << " "
-                //               << manifoldMesh->nFaces() << std::endl;
-                //     std::cerr << "edges split" << std::endl;
-                // } else {
-                ensureHaveManifoldMesh();
-
-                // std::vector<Halfedge> halfedgesOnManifold;
-                // geometry->requireVertexIndices();
-                // for (Halfedge he : curveHalfedges) {
-                //     Vertex vA = manifoldMesh->vertex(geometry->vertexIndices[he.tailVertex()]);
-                //     Vertex vB = manifoldMesh->vertex(geometry->vertexIndices[he.tipVertex()]);
-                //     std::cerr << he.tailVertex() << " " << he.tipVertex() << " " << vA << " " << vB << std::endl;
-                //     halfedgesOnManifold.push_back(determineHalfedgeFromVertices(vA, vB));
-                // }
-                // geometry->requireVertexIndices();
-
-                // for (Halfedge he : curveHalfedges) {
-                //     halfedgesOnManifold.push_back(manifoldMesh->halfedge(he.getIndex()));
-                // }
-
-                std::vector<SurfacePoint> curveNodesOnManifold;
-                for (const auto& pt : curveNodes) {
-                    curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
-                }
-                curveHalfedgesOnManifold = setCurveHalfedges(curveNodesOnManifold, curveEdges, true);
-                std::cout << "curveHalfedgesOnManifold.size(): " << curveHalfedgesOnManifold.size() << std::endl;
-
-                // splitEdgesIfNecessary(curveHalfedgesOnManifold);
-                // std::cerr << "edges split" << std::endl;
-                // }
-            }
-        }
+        std::string CURVE_FILEPATH = args::get(curveFilename);
+        readCurves(*mesh, CURVE_FILEPATH, CURVE_NODES, CURVE_EDGES);
     }
 
-    if (mesh->isManifold()) {
-        ensureHaveIntrinsicSolver();
-    }
+    // Display curve.
+    displayCurves(*geometry, CURVE_NODES, CURVE_EDGES);
 
-    std::cerr << "Displaying curves..." << std::endl;
-    displayCurves(getGeom(), getCurveHalfedges(), curveNodes, curveEdges, psMesh, MARKED_EDGES);
+    // // TODO: convert curves to halfedges, if applicable
+    // if (curveHalfedges.size() == 0) curveHalfedges = setCurveHalfedges(curveNodes, curveEdges, true);
+    // if (curveNodes.size() + inputCurveEdges.size() + curveEdges.size() + curveHalfedges.size() != 0) {
+    //     if (mesh->isManifold()) {
+    //         HERE();
+    //         // std::cerr << "Remeshing if necessary..." << std::endl;
+    //         // bool wasRemeshed = remeshIfNecessary();
+    //         // std::cerr << "Splitting edges if necessary..." << std::endl;
+    //         // if (wasRemeshed) {
+    //         //     std::cerr << "mesh split along curve" << std::endl;
+    //         //     splitEdgesIfNecessary(curveHalfedgesOnManifold);
+    //         //     std::cerr << manifoldMesh->nVertices() << " " << manifoldMesh->nEdges() << " "
+    //         //               << manifoldMesh->nFaces() << std::endl;
+    //         //     std::cerr << "edges split" << std::endl;
+    //         // } else {
+    //         ensureHaveManifoldMesh();
+
+    //         // std::vector<Halfedge> halfedgesOnManifold;
+    //         // geometry->requireVertexIndices();
+    //         // for (Halfedge he : curveHalfedges) {
+    //         //     Vertex vA = manifoldMesh->vertex(geometry->vertexIndices[he.tailVertex()]);
+    //         //     Vertex vB = manifoldMesh->vertex(geometry->vertexIndices[he.tipVertex()]);
+    //         //     std::cerr << he.tailVertex() << " " << he.tipVertex() << " " << vA << " " << vB << std::endl;
+    //         //     halfedgesOnManifold.push_back(determineHalfedgeFromVertices(vA, vB));
+    //         // }
+    //         // geometry->requireVertexIndices();
+
+    //         // for (Halfedge he : curveHalfedges) {
+    //         //     halfedgesOnManifold.push_back(manifoldMesh->halfedge(he.getIndex()));
+    //         // }
+
+    //         std::vector<SurfacePoint> curveNodesOnManifold;
+    //         for (const auto& pt : curveNodes) {
+    //             curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
+    //         }
+    //         curveHalfedgesOnManifold = setCurveHalfedges(curveNodesOnManifold, curveEdges, true);
+    //         std::cout << "curveHalfedgesOnManifold.size(): " << curveHalfedgesOnManifold.size() << std::endl;
+
+    //         // splitEdgesIfNecessary(curveHalfedgesOnManifold);
+    //         // std::cerr << "edges split" << std::endl;
+    //         // }
+    //     }
+    // }
+
+    // if (mesh->isManifold()) {
+    //     ensureHaveIntrinsicSolver();
+    // }
 
     polyscope::show();
 
