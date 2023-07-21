@@ -8,20 +8,23 @@
  * Output: The winding number function on corners. Corners adjacent to interior endpoints will have placeholder values
  * SPECIAL_VAL; their values are to be interpolated using the scheme described in Section 2.3.2.
  */
-CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& oneChain) {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chain) const {
 
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
-    Vector<double> boundary = d0T * oneChain;
+    Vector<double> boundary = d0T * chain;
     double eps = 1e-5;
     bool isCurveClosed = true;
     // Check if the curve is closed relative to the boundary.
-    // In the same loop, determine the interior vertices of the curve.
-    // Also store an arbitrary outgoing cut halfedge per interior vertex.
+    // In the same loop, pre-compute a few curve quantities needed downstream, namely,
+    //  - determine the interior vertices of the curve
+    //  - store an arbitrary outgoing cut halfedge per interior vertex
+    //  - curve endpoints and their signs.
     std::map<Vertex, Halfedge> outgoingHalfedgeOnCurve;
+    std::vector<std::pair<Vertex, bool>> endpoints;
     geom.requireVertexIndices();
     geom.requireEdgeIndices();
     for (Vertex v : mesh.vertices()) {
@@ -29,9 +32,12 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& oneC
         if (abs(boundary[vIdx]) > eps && !v.isBoundary() && v.isManifold()) {
             isCurveClosed = false;
             isInteriorEndpoint[v] = true;
+            bool sgn = (boundary[vIdx] > 0);
+            size_t mag = abs(boundary[vIdx]);
+            for (size_t i = 0; i < mag; i++) endpoints.emplace_back(v, sgn);
         } else if (v.isManifold()) {
             for (Halfedge he : v.outgoingHalfedges()) {
-                if (abs(oneChain[geom.edgeIndices[he.edge()]] > eps)) {
+                if (abs(chain[geom.edgeIndices[he.edge()]] > eps)) {
                     interiorVertices.push_back(v);
                     outgoingHalfedgeOnCurve.insert(std::make_pair(v, he));
                     break;
@@ -42,13 +48,14 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& oneC
     geom.unrequireVertexIndices();
     geom.unrequireEdgeIndices();
 
-    CornerData<double> c = computeReducedCoordinates(oneChain, interiorVertices, outgoingHalfedgeOnCurve);
+    CornerData<double> c = computeReducedCoordinates(chain, interiorVertices, outgoingHalfedgeOnCurve);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
 
     if (!simplyConnected && doHomologyCorrection) {
-        Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint);
+        Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, w);
         if (isCurveClosed) gamma = harmonicComponent(gamma);
-        CornerData<double> v = approximateResidual ? approximateResidualFunction(gamma) : residualFunction(gamma);
+        CornerData<double> v =
+            approximateResidual ? approximateResidualFunction(chain, endpoints, gamma) : residualFunction(chain, gamma);
         c = subtractJumpDerivative(interiorVertices, isInteriorEndpoint, v, c);
         CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
     }
@@ -83,8 +90,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Halfedge
 
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::array<Face, 2>>& curve) const {
 
-    // Convert the input curve to a 1-chain, then call generic solver.
-    return solve(chain);
+    // TODO
 }
 
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<SurfacePoint>& curveNodes,
@@ -115,7 +121,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
     CornerData<double> reducedCoordinates(mesh, 0);
     for (const auto& vi : interiorVertices) {
         // we should have already filtered for nonmanifold vertices when we computed interiorVertices
-        Halfedge start = outgoingHalfedgeOnCurve[vi];
+        Halfedge start = outgoingHalfedgeOnCurve.at(vi);
         Halfedge curr = start;
         double cumJump = 0.; // cumulative jump
         do {
@@ -175,7 +181,8 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
  * Output: The Darboux derivative Du = ω ∈ R^|E|, represented as a discrete primal 1-form. Values of ω at edges incident
  * on interior endpoints are 0 by definition (Section 2.4.2.)
  */
-Vector<double> SurfaceWindingNumbersSolver::DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint) const {
+Vector<double> SurfaceWindingNumbersSolver::DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint,
+                                                              const CornerData<double>& u) const {
 
     geom.requireEdgeIndices();
     Vector<double> omega = Vector<double>::Zero(mesh.nEdges());
@@ -265,16 +272,16 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
  */
 Vector<double> SurfaceWindingNumbersSolver::harmonicComponent(const Vector<double>& omega) const {
 
-    ensureHaveCoexactSolver();
     Vector<double> deltaBeta = computeCoExactComponent(omega);
     Vector<double> gamma = omega - deltaBeta;
     return gamma;
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::residualFunction(const Vector<double>& gamma) const {
+CornerData<double> SurfaceWindingNumbersSolver::residualFunction(const Vector<double>& chain,
+                                                                 const Vector<double>& gamma) const {
 
     CornerData<double> vInit = integrateLocally(gamma);
-    CornerData<double> v = solveLinearProgram(vInit);
+    CornerData<double> v = solveLinearProgram(chain, vInit);
     return v;
 }
 
@@ -295,9 +302,8 @@ CornerData<double> SurfaceWindingNumbersSolver::integrateLocally(const Vector<do
     return vInit;
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const CornerData<double>& vInit) const {
-
-    // TODO: fix "chain"
+CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<double>& chain,
+                                                                   const CornerData<double>& vInit) const {
 
     size_t F = mesh.nFaces();
     size_t E = mesh.nEdges();
@@ -417,24 +423,22 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const CornerD
     return vPost;
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& gamma,
-                                                                            const std::vector<Halfedge>& curve) const {
-
-    geom.requireEdgeIndices();
+CornerData<double>
+SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& inputChain,
+                                                         const std::vector<std::pair<Vertex, bool>>& endpoints,
+                                                         const Vector<double>& gamma) const {
 
     // Complete curve using a shortest-path heuristic.
-    std::vector<Halfedge> completedCurve = dijkstraCancelBoundary(curve);
-    EdgeData<bool> dijkCurve(mesh, false);
-    for (const Halfedge& he : completedCurve) dijkCurve[he.edge()] = true;
-    if (psMesh) psMesh->addEdgeScalarQuantity("Dijkstra-completed curve", dijkCurve);
+    Vector<double> chain = dijkstraCompleteCurve(inputChain, endpoints);
+    // polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("Dijkstra-completed curve", completedChain);
 
     // Detect connected components.
     // In the same loop, integrate gamma within each connected component.
-    Vector<double> chain = convertToChain(completedCurve);
     double eps = 1e-5;
     int regionLabel = 0;
     FaceData<int> visitedFace(mesh, 0);
     CornerData<double> vPreShift(mesh, 0);
+    geom.requireEdgeIndices();
     for (Face seedFace : mesh.faces()) {
 
         if (visitedFace[seedFace] > 0) continue;
@@ -477,8 +481,8 @@ CornerData<double> SurfaceWindingNumbersSolver::approximateResidualFunction(cons
     }
     geom.unrequireEdgeIndices();
     int nComponents = regionLabel;
-    if (psMesh) psMesh->addFaceScalarQuantity("connected components", visitedFace);
-    if (psMesh) psMesh->addCornerScalarQuantity("v pre-shift", vPreShift);
+    // polyscope::getSurfaceMesh("input mesh")->->addFaceScalarQuantity("connected components", visitedFace);
+    // polyscope::getSurfaceMesh("input mesh")->->addCornerScalarQuantity("v pre-shift", vPreShift);
 
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
     std::vector<Edge> bEdges;
@@ -524,11 +528,10 @@ CornerData<double> SurfaceWindingNumbersSolver::approximateResidualFunction(cons
         constraints.push_back(lc);
     }
 
-    // Add constraints on slack variables so that for each edge that was
-    // originally in the curve, the jump in v is at most jump in u.
-    Vector<double> origChain = convertToChain(curve);
+    // Add constraints on slack variables so that for each edge that was originally in the curve, the jump in v is at
+    // most jump in u.
     for (size_t i = 0; i < reIdx; i++) {
-        double chainCoeff = origChain[geom.edgeIndices[bEdges[i]]];
+        double chainCoeff = inputChain[geom.edgeIndices[bEdges[i]]];
         if (abs(chainCoeff) > eps) {
             COMISO::LinearConstraint::SVectorNC coeffs(numVars);
             coeffs.coeffRef(nComponents + i) = 1.;
@@ -578,13 +581,12 @@ CornerData<double> SurfaceWindingNumbersSolver::approximateResidualFunction(cons
 #endif
 
     // Reconstruct solution using shifts solved for from LP.
-    CornerData<double> v_corners = vPreShift; // v post-shift
+    CornerData<double> vPostShift = vPreShift;
     for (size_t i = 0; i < nComponents; i++) {
         double shift = lp.x()[i];
-        std::cerr << shift << std::endl;
         for (Face f : mesh.faces()) {
             if (visitedFace[f] != i + 1) continue;
-            for (Corner c : f.adjacentCorners()) v_corners[c] += shift;
+            for (Corner c : f.adjacentCorners()) vPostShift[c] += shift;
         }
     }
     std::cerr << "reducedLinearProgram() solved" << std::endl;
@@ -595,7 +597,140 @@ CornerData<double> SurfaceWindingNumbersSolver::approximateResidualFunction(cons
         delete constraints[i];
     }
 
-    return v_corners;
+    return vPostShift;
+}
+
+Vector<double>
+SurfaceWindingNumbersSolver::dijkstraCompleteCurve(const Vector<double>& chain,
+                                                   const std::vector<std::pair<Vertex, bool>>& curveEndpoints) const {
+
+    // Create custom EdgeLengthGeometry, removing original curve edges from the graph.
+    EdgeData<double> dijkstraWeights(mesh);
+    geom.requireEdgeLengths();
+    geom.requireEdgeIndices();
+    const double infinity = std::numeric_limits<double>::infinity();
+    for (Edge e : mesh.edges()) {
+        size_t eIdx = geom.edgeIndices[e];
+        double length = (abs(chain[eIdx]) > 1e-5) ? geom.edgeLengths[e] : infinity;
+        dijkstraWeights[e] = length;
+    }
+    geom.unrequireEdgeLengths();
+    geom.unrequireEdgeIndices();
+    EdgeLengthGeometry dijkstraMesh(mesh, dijkstraWeights);
+
+    // Only connect endpoints of opposite sign.
+    Vertex startVert;
+    bool sgn;
+    std::vector<std::pair<Vertex, bool>> endpoints = curveEndpoints;
+    std::vector<Halfedge> completedCurve;
+    while (endpoints.size() > 0) {
+        std::tie(startVert, sgn) = endpoints.back();
+        endpoints.pop_back();
+        std::set<Vertex> endVerts;
+        for (auto& tup : endpoints) {
+            if (tup.second != sgn) endVerts.insert(tup.first);
+        }
+        std::vector<Halfedge> path = dijkstraPath(dijkstraMesh, startVert, endVerts);
+        Vertex endVert = path.back().tipVertex();
+        if (!sgn) {
+            std::reverse(path.begin(), path.end());
+            for (Halfedge& he : path) {
+                he = he.twin();
+            }
+        }
+        completedCurve.insert(completedCurve.end(), path.begin(), path.end());
+        // Determine which endpoint we ended at, so we can delete it.
+        for (size_t i = 0; i < endpoints.size(); i++) {
+            if (endpoints[i].first == endVert) {
+                endpoints.erase(endpoints.begin() + i);
+                break;
+            }
+        }
+    }
+
+    // Convert to chain.
+    Vector<double> completedChain = chain + convertToChain(completedCurve);
+
+    return completedChain;
+}
+
+/*
+ * Copied from geometry-central with a minor change to the termination condition so it can take in multiple possible
+ * endpoints.
+ */
+std::vector<Halfedge> SurfaceWindingNumbersSolver::dijkstraPath(IntrinsicGeometryInterface& geom_,
+                                                                const Vertex& startVert,
+                                                                const std::set<Vertex>& endVerts) const {
+
+    // Early out for empty case
+    if (endVerts.find(startVert) != endVerts.end()) {
+        return std::vector<Halfedge>();
+    }
+
+    // Gather values
+    SurfaceMesh& mesh = geom_.mesh;
+    geom_.requireEdgeLengths();
+
+    // Search state: incoming halfedges to each vertex, once discovered
+    std::unordered_map<Vertex, Halfedge> incomingHalfedge;
+
+    // Search state: visible neighbors eligible to expand to
+    using WeightedHalfedge = std::tuple<double, Halfedge>;
+    std::priority_queue<WeightedHalfedge, std::vector<WeightedHalfedge>, std::greater<WeightedHalfedge>> pq;
+
+    // Helper to add a vertex's
+    auto vertexDiscovered = [&](Vertex v) {
+        return v == startVert || incomingHalfedge.find(v) != incomingHalfedge.end();
+    };
+    auto enqueueVertexNeighbors = [&](Vertex v, double dist) {
+        for (Halfedge he : v.outgoingHalfedges()) {
+            if (!vertexDiscovered(he.twin().vertex())) {
+                double len = geom_.edgeLengths[he.edge()];
+                double targetDist = dist + len;
+                pq.emplace(targetDist, he);
+            }
+        }
+    };
+
+    // Add initial halfedges
+    enqueueVertexNeighbors(startVert, 0.);
+
+    while (!pq.empty()) {
+
+        // Get the next closest neighbor off the queue
+        double currDist = std::get<0>(pq.top());
+        Halfedge currIncomingHalfedge = std::get<1>(pq.top());
+        pq.pop();
+
+        Vertex currVert = currIncomingHalfedge.twin().vertex();
+        if (vertexDiscovered(currVert)) continue;
+
+        // Accept the neighbor
+        incomingHalfedge[currVert] = currIncomingHalfedge;
+
+        // Found path! Walk backwards to reconstruct it and return
+        if (endVerts.find(currVert) != endVerts.end()) {
+            std::vector<Halfedge> path;
+            Vertex walkV = currVert;
+            while (walkV != startVert) {
+                Halfedge prevHe = incomingHalfedge[walkV];
+                path.push_back(prevHe);
+                walkV = prevHe.vertex();
+            }
+
+            std::reverse(std::begin(path), std::end(path));
+
+            geom_.unrequireEdgeLengths();
+            return path;
+        }
+
+        // Enqueue neighbors
+        enqueueVertexNeighbors(currVert, currDist);
+    }
+
+    // Didn't find path
+    geom_.unrequireEdgeLengths();
+    return std::vector<Halfedge>();
 }
 
 /*
@@ -633,33 +768,26 @@ CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
 void SurfaceWindingNumbersSolver::ensureHaveCoexactSolver() {
 
     if (coexactSolver == nullptr) {
-        geom.requireDECOperators();
-        d0 = geom.d0;
-        d0T = d0.transpose();
-        d1 = geom.d1;
-        d1T = d1.transpose();
-        hodge1 = geom.hodge1;
-        hodge1Inv = geom.hodge1Inverse;
-        geom.requireEdgeIndices();
-        const EdgeData<size_t>& eIdx = geom.edgeIndices;
-        for (Edge e : mesh.edges()) {
-            double wInv = halfedgeCotanWeights[e.halfedge()];
-            if (!e.isBoundary()) wInv += halfedgeCotanWeights[e.halfedge().twin()];
-            double w = 1. / wInv;
-            if (!std::isfinite(w) || std::isnan(w) || w < 0) {
-                std::cout << "bad w: " << w << vendl;
-                w = 1;
-            } else if (w > 1000) {
-                std::cout << "really big w: " << w << vendl;
-                w = 1000;
-            }
-            hodge1Inv.coeffRef(eIdx[e], eIdx[e]) = w;
-        }
-        geom.unrequireEdgeIndices();
+
+        // geom.requireEdgeIndices();
+        // geom.requireEdgeCotanWeights();
+        // const EdgeData<size_t>& eIdx = geom.edgeIndices;
+        // for (Edge e : mesh.edges()) {
+        //     double wInv = geom.edgeCotanWeights[e];
+        //     double w = 1. / wInv;
+        //     if (!std::isfinite(w) || std::isnan(w) || w < 0) {
+        //         w = 1;
+        //     } else if (w > 1000) {
+        //         w = 1000;
+        //     }
+        //     hodge1Inv.coeffRef(eIdx[e], eIdx[e]) = w;
+        // }
+        // geom.unrequireEdgeIndices();
+        // geom.unrequireEdgeCotanWeights();
+
         SparseMatrix<double> B = d1 * hodge1Inv * d1T;
         shiftDiagonal(B, 1e-8);
         coexactSolver.reset(new PositiveDefiniteSolver<double>(B));
-        geom.unrequireDECOperators();
     }
 }
 
@@ -708,14 +836,13 @@ Vector<double> SurfaceWindingNumbersSolver::convertToChain(const std::vector<Ver
 // ==== CONSTRUCTOR
 
 
-SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom_, bool doHomologyCorrection_,
-                                                         bool approximateResidual_)
-    : mesh(geom_.mesh), geom(geom_), doHomologyCorrection(doHomologyCorrection_),
-      approximateResidual(approximateResidual_) {
+SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom_)
+    : mesh(geom_.mesh), geom(geom_) {
 
     if (!mesh.isTriangular()) throw std::logic_error("Mesh must be triangular to run SWN.");
 
     // DEC operators
+    // TODO: mollify hodge1 weights / halfedgeCotanWeights?
     geom.requireDECOperators();
     d0 = geom.d0;
     d0T = d0.transpose();
@@ -724,6 +851,9 @@ SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterf
     d1 = geom.d1;
     d1T = d1.transpose();
     geom.unrequireDECOperators();
+
+    // Create solvers
+    ensureHaveCoexactSolver();
 
     // Determine whether the mesh is simply-connected.
     bool simplyConnected = false;

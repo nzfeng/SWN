@@ -41,12 +41,9 @@ polyscope::SurfaceGraphQuantity* intEdgeQ;
 
 // == the SWN solver
 std::unique_ptr<SurfaceWindingNumbersSolver> SWNSolver;
+std::unique_ptr<SurfaceWindingNumbersSolver> intrinsicSolver;
 
-// == parameters
-std::string MESHNAME = "input mesh";
-std::string MESH_FILEPATH, CURVE_FILEPATH;
-enum SolverMode { OriginalMesh = 0, IntrinsicMesh };
-int SOLVER_MODE = SolverMode::OriginalMesh;
+// == solve parameters
 bool DO_HOMOLOGY_CORRECTION = true;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
 float REFINE_ANGLE_THRESH = 30.;
@@ -55,12 +52,95 @@ bool USING_MANIFOLD_MESH = false; // if using the re-meshed (manifold) mesh
 bool USE_SPECIAL_BASES = true;
 int MAX_EDGE_SPLITS = 3;
 
+// == program parameters
+std::string MESHNAME = "input mesh";
+std::string MESH_FILEPATH, CURVE_FILEPATH;
+enum SolverMode { OriginalMesh = 0, IntrinsicMesh };
+int SOLVER_MODE = SolverMode::OriginalMesh;
+bool VIS_INTRINSIC_MESH = false;
+
 // == curve data
 std::vector<SurfacePoint> CURVE_NODES;
 std::vector<std::array<size_t, 2>> CURVE_EDGES;
-std::vector<Halfedge> CURVE_HALFEDGES;
+std::vector<Halfedge> curveHalfedges;
 std::vector<Halfedge> curveHalfedgesOnManifold;
 std::vector<Halfedge> curveHalfedgesOnIntrinsic;
+
+
+SurfaceMesh& getMesh() {
+    return USING_MANIFOLD_MESH ? *manifoldMesh : *mesh;
+}
+
+VertexPositionGeometry& getGeom() {
+    return USING_MANIFOLD_MESH ? *manifoldGeom : *geometry;
+}
+
+void setManifoldMesh() {
+
+    USING_MANIFOLD_MESH = true;
+    SWNSolver.reset(new SurfaceWindingNumbersSolver(*manifoldGeom));
+    psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->vertexPositions, manifoldMesh->getFaceVertexList(),
+                                            polyscopePermutations(*manifoldMesh));
+}
+
+void ensureHaveManifoldMesh() {
+
+    if (!mesh->isManifold() || !mesh->isOriented())
+        throw std::logic_error(
+            "SWN: Mesh must be manifold and orientable to convert to geometrycentral::ManifoldSurfaceMesh.");
+
+    if (manifoldMesh == nullptr) {
+        manifoldMesh = mesh->toManifoldMesh();
+        manifoldMesh->compress();
+    }
+    if (manifoldGeom == nullptr) {
+        manifoldGeom = geometry->reinterpretTo(*manifoldMesh);
+        manifoldGeom->refreshQuantities();
+    }
+
+    psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->inputVertexPositions,
+                                            manifoldMesh->getFaceVertexList(), polyscopePermutations(*manifoldMesh));
+}
+
+/*
+ * If an intrinsic triangulation has not yet been created, create one. Otherwise do nothing.
+ * The intrinsic triangulation is always based on the original input mesh.
+ */
+void ensureHaveIntrinsicTriangulation() {
+
+    if (intTri != nullptr) return;
+
+    ensureHaveManifoldMesh();
+
+    intTri = std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation>(
+        new IntegerCoordinatesIntrinsicTriangulation(*manifoldMesh, *manifoldGeom));
+
+    // If curve is given as a set of mesh edges, set these edges as "marked" in the intrinsic triangulation so they
+    // never get flipped.
+    if (curveHalfedges.size() + curveHalfedgesOnManifold.size() > 0) {
+
+        EdgeData<bool> markedEdges(*intTri->intrinsicMesh, false);
+
+        // The intrinsic triangulation should at first just be a copy of the input mesh.
+        if (curveHalfedgesOnManifold.size() == 0) {
+            std::vector<SurfacePoint> curveNodesOnManifold;
+            for (const auto& pt : CURVE_NODES) {
+                curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
+            }
+            curveHalfedgesOnManifold = setCurveHalfedges(curveNodesOnManifold, CURVE_EDGES);
+        }
+
+        setManifoldMesh();
+        getGeom().requireEdgeIndices();
+        for (Halfedge he : curveHalfedgesOnManifold) {
+            size_t eIdx = getGeom().edgeIndices[he.edge()];
+            markedEdges[intTri->intrinsicMesh->edge(eIdx)] = true;
+        }
+        getGeom().unrequireEdgeIndices();
+
+        intTri->setMarkedEdges(markedEdges);
+    }
+}
 
 void ensureHaveIntrinsicSolver() {
 
@@ -86,14 +166,13 @@ void visualizeIntrinsicEdges() {
         thisResult.insert(std::end(thisResult), std::begin(positions), std::end(positions));
     }
 
-    switchPolyscopeMeshToDisplay(false, true);
     intEdgeQ = psMesh->addSurfaceGraphQuantity("intrinsic edges", result);
     intEdgeQ->setEnabled(true);
     intEdgeQ->setColor(polyscope::render::RGB_ORANGE);
     intEdgeQ->setRadius(0.0005);
 }
 
-void functionCallback {
+void functionCallback() {
 
     // Solve on original mesh;
     ImGui::RadioButton("Original mesh", &SOLVER_MODE, SolverMode::OriginalMesh);

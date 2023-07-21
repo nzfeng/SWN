@@ -69,7 +69,8 @@ else()
 endif()
 
 # == Deps
-add_subdirectory(deps/CoMISo)
+add_subdirectory(../common-deps/deps/CoMISo deps/CoMISo)
+#add_subdirectory(deps/CoMISo)
 add_subdirectory(deps/geometry-central)
 add_subdirectory(deps/polyscope)
 

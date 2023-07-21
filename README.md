@@ -27,12 +27,14 @@ TODO: Fill in article numbers.
 
 # Getting started
 
+The program relies on Gurobi to solve linear programs, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
+
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
 cd SWN
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCOMISO_BUILD_WITHOUT_BOOST=On -DCMAKE_BUILD_TYPE=Release ..
 make -j8 # or however many cores you have or want to use
 bin/main /path/to/mesh /path/to/curve --viz
 ```
@@ -40,6 +42,12 @@ bin/main /path/to/mesh /path/to/curve --viz
 A Polyscope GUI will open:
 
 ![Screenshot of Polyscope GUI](media/GUI.png)
+
+The program uses [CoMISo](https://www.graphics.rwth-aachen.de/software/comiso/) API to interface with Gurobi. However, it can be finicky to configure, so I've included troubleshooting steps in the section below. (An alternative is [Google OR-Tools](https://developers.google.com/optimization/), although this can also be finicky.)
+
+## Configuring CoMISo
+
+TODO
 
 # Usage
 

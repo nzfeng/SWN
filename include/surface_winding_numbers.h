@@ -39,18 +39,17 @@ class SurfaceWindingNumbersSolver {
 
   public:
     // === Constructor
-    SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom, bool doHomologyCorrection = true,
-                                bool approximateResidual = false);
+    SurfaceWindingNumbersSolver(IntrinsicGeometryInterface& geom);
 
     // === Solve
 
     /* Curve(s) is specified as a primal 1-chain. Edges of the curve that pass through non-manifold vertices are
      * omitted. (If this is undesirable, consider using a dual 1-chain; see below.)
      */
-    CornerData<double> solve(const Vector<double>& primalChain);
+    CornerData<double> solve(const Vector<double>& primalChain) const;
 
     /* Curve(s) is specified as an unordered collection of oriented mesh edges. */
-    CornerData<double> solve(const std::vector<Halfedge>& curve);
+    CornerData<double> solve(const std::vector<Halfedge>& curve) const;
 
     /* Curve is specified as an ordered sequence of mesh vertices. */
     CornerData<double> solve(const std::vector<Vertex>& curve) const;
@@ -71,12 +70,12 @@ class SurfaceWindingNumbersSolver {
      * equation is solved using a Poisson formulation, but homology correction is no longer possible.
      */
     CornerData<double> solve(const std::vector<SurfacePoint>& curveNodes,
-                             const std::vector<std::array<size_t, 2>>& curveEdges, bool mutateMesh = true) const {}
+                             const std::vector<std::array<size_t, 2>>& curveEdges, bool mutateMesh = true) const;
 
     // === Parameters
     double epsilon = 1e-2;
     bool doHomologyCorrection = true;
-    bool approximateResidual = true;
+    bool approximateResidual = false;
 
   private:
     // === Members
@@ -103,7 +102,7 @@ class SurfaceWindingNumbersSolver {
                                          const VertexData<bool>& isInteriorEndpoint,
                                          const CornerData<double>& reducedCoordinates) const;
 
-    Vector<double> DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint) const;
+    Vector<double> DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint, const CornerData<double>& u) const;
 
     SparseMatrix<double> buildLaplacian(const VertexData<bool>& isInteriorEndpoint, const VertexData<size_t>& DOFindex,
                                         const size_t& nDOFs) const;
@@ -115,14 +114,21 @@ class SurfaceWindingNumbersSolver {
 
     Vector<double> harmonicComponent(const Vector<double>& omega) const;
 
-    CornerData<double> residualFunction(const Vector<double>& gamma) const;
+    CornerData<double> residualFunction(const Vector<double>& chain, const Vector<double>& gamma) const;
 
     CornerData<double> integrateLocally(const Vector<double>& gamma) const;
 
-    CornerData<double> solveLinearProgram(const CornerData<double>& vInit) const;
+    CornerData<double> solveLinearProgram(const Vector<double>& chain, const CornerData<double>& vInit) const;
 
-    CornerData<double> approximateResidualFunction(const Vector<double>& gamma,
-                                                   const std::vector<Halfedge>& curve) const;
+    CornerData<double> approximateResidualFunction(const Vector<double>& chain,
+                                                   const std::vector<std::pair<Vertex, bool>>& endpoints,
+                                                   const Vector<double>& gamma) const;
+
+    Vector<double> dijkstraCompleteCurve(const Vector<double>& chain,
+                                         const std::vector<std::pair<Vertex, bool>>& curveEndpoints) const;
+
+    std::vector<Halfedge> dijkstraPath(IntrinsicGeometryInterface& geom, const Vertex& startVert,
+                                       const std::set<Vertex>& endVerts) const;
 
     CornerData<double> subtractJumpDerivative(const std::vector<Vertex>& interiorVertices,
                                               const VertexData<bool>& isInteriorEndpoint,

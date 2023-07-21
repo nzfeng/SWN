@@ -13,6 +13,9 @@
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
 
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
+
 // ===================== NUMERICAL
 
 int mod(int a, int b); // Pythonic modulus
@@ -23,12 +26,17 @@ int roundToNearestInteger(double x);
 
 Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
 
+SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
+
+std::vector<Halfedge> setCurveHalfedges(const std::vector<SurfacePoint>& curveNodes,
+                                        const std::vector<std::array<size_t, 2>>& curveEdges);
+
 /* Read in curve, encoded as OBJ line objects. */
-void readLines(const SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
+void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
                std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
 
 /* Read in curve data (from a file NOT containing mesh data), encoded as segments between barycentric points. */
-void readCurves(const SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
+void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
                 std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
 
 // write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
