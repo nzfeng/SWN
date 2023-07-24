@@ -43,12 +43,6 @@ A Polyscope GUI will open:
 
 ![Screenshot of Polyscope GUI](media/GUI.png)
 
-The program uses [CoMISo](https://www.graphics.rwth-aachen.de/software/comiso/) API to interface with Gurobi. However, it can be finicky to configure, so I've included troubleshooting steps in the section below. (An alternative is [Google OR-Tools](https://developers.google.com/optimization/), although this can also be finicky.)
-
-## Configuring CoMISo
-
-TODO
-
 # Usage
 
 Once the executable `bin/main` has been built, running `bin/main /path/to/mesh /path/to/curve` will output the input mesh with texture coordinates containing the winding number solution. 
@@ -57,12 +51,17 @@ You can pass several solve options to the command line, options which are also s
 
 |flag | purpose|
 | ------------- |-------------|
-|`--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates |
-|`--doHomologyCorrection`=true| Correct for nonbounding curve components |
+|`--curveFilename=input.[obj,txt]`| Filepath to input curve. |
 |`--allowRemeshing`=true| Allow the input surface mesh to be re-meshed |
-|`--viz`| Show the GUI |
+|`--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates |
+|`--correctNonbounding`=true| Correct for nonbounding curve components |
+|`--approximateResidual`=false| Use reduced-size linear program to approximate residual function, instead of solving a more expensive LP. |
+<!--|`--viz`| Show the GUI |-->
 |`--version`, `-v`| Version info |
 |`--help`, `-h`| Display help |
+
+## Curve input
+TODO
 
 ## File formats
 The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-central website](https://geometry-central.net/surface/utilities/io/#reading-meshes) for up-to-date information on supported file types.

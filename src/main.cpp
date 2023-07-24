@@ -1,16 +1,3 @@
-#include "geometrycentral/surface/common_subdivision.h"
-#include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
-#include "geometrycentral/surface/intrinsic_triangulation.h"
-#include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "geometrycentral/surface/meshio.h"
-#include "geometrycentral/surface/mutation_manager.h"
-#include "geometrycentral/surface/surface_mesh.h"
-#include "geometrycentral/surface/trace_geodesic.h"
-#include "geometrycentral/surface/vertex_position_geometry.h"
-
-#include "polyscope/polyscope.h"
-#include "polyscope/surface_mesh.h"
-
 #include "args/args.hxx"
 #include "imgui.h"
 
@@ -37,14 +24,18 @@ std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation> intTri;
 // == Polyscope stuff
 polyscope::SurfaceMesh* psMesh;
 polyscope::SurfaceMesh* psCsMesh; // common subdivision
-polyscope::SurfaceGraphQuantity* intEdgeQ;
+polyscope::CurveNetwork* intEdgeQ;
 
 // == the SWN solver
 std::unique_ptr<SurfaceWindingNumbersSolver> SWNSolver;
 std::unique_ptr<SurfaceWindingNumbersSolver> intrinsicSolver;
 
 // == solve parameters
+bool ALLOW_REMESHING = true;
 bool DO_HOMOLOGY_CORRECTION = true;
+bool APPROXIMATE_RESIDUAL = false;
+std::string OUTPUT_FILENAME;
+float EPSILON = 1e-2;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
 float REFINE_ANGLE_THRESH = 30.;
 int MAX_INSERTIONS = -1;
@@ -62,6 +53,7 @@ bool VIS_INTRINSIC_MESH = false;
 // == curve data
 std::vector<SurfacePoint> CURVE_NODES;
 std::vector<std::array<size_t, 2>> CURVE_EDGES;
+std::vector<std::array<Face, 2>> DUAL_CHAIN;
 std::vector<Halfedge> curveHalfedges;
 std::vector<Halfedge> curveHalfedgesOnManifold;
 std::vector<Halfedge> curveHalfedgesOnIntrinsic;
@@ -79,8 +71,8 @@ void setManifoldMesh() {
 
     USING_MANIFOLD_MESH = true;
     SWNSolver.reset(new SurfaceWindingNumbersSolver(*manifoldGeom));
-    psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->vertexPositions, manifoldMesh->getFaceVertexList(),
-                                            polyscopePermutations(*manifoldMesh));
+    psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->vertexPositions, manifoldMesh->getFaceVertexList());
+    psMesh->setAllPermutations(polyscopePermutations(*manifoldMesh));
 }
 
 void ensureHaveManifoldMesh() {
@@ -98,8 +90,9 @@ void ensureHaveManifoldMesh() {
         manifoldGeom->refreshQuantities();
     }
 
-    psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->inputVertexPositions,
-                                            manifoldMesh->getFaceVertexList(), polyscopePermutations(*manifoldMesh));
+    psMesh =
+        polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->inputVertexPositions, manifoldMesh->getFaceVertexList());
+    psMesh->setAllPermutations(polyscopePermutations(*manifoldMesh));
 }
 
 /*
@@ -127,7 +120,7 @@ void ensureHaveIntrinsicTriangulation() {
             for (const auto& pt : CURVE_NODES) {
                 curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
             }
-            curveHalfedgesOnManifold = setCurveHalfedges(curveNodesOnManifold, CURVE_EDGES);
+            curveHalfedgesOnManifold = convertToHalfedges(curveNodesOnManifold, CURVE_EDGES);
         }
 
         setManifoldMesh();
@@ -152,21 +145,22 @@ void visualizeIntrinsicEdges() {
 
     if (intTri == nullptr) return;
 
-    std::vector<std::vector<Vector3>> result;
+    std::vector<Vector3> nodes;
+    std::vector<std::array<size_t, 2>> edges;
     EdgeData<std::vector<SurfacePoint>> traces = intTri->traceAllIntrinsicEdgesAlongInput();
     for (Edge e : intTri->intrinsicMesh->edges()) {
-        result.emplace_back();
-        std::vector<Vector3>& thisResult = result.back();
+
         // Convert to 3D positions.
+        size_t N = nodes.size();
+        size_t M = traces[e].size();
         std::vector<Vector3> positions;
         for (const auto& pt : traces[e]) {
-            positions.push_back(pt.interpolate(manifoldGeom->vertexPositions));
+            nodes.push_back(pt.interpolate(manifoldGeom->vertexPositions));
         }
-        // Add the points to the list
-        thisResult.insert(std::end(thisResult), std::begin(positions), std::end(positions));
+        for (size_t i = 0; i < M - 1; i++) edges.push_back({N + i, N + i + 1});
     }
 
-    intEdgeQ = psMesh->addSurfaceGraphQuantity("intrinsic edges", result);
+    intEdgeQ = polyscope::registerCurveNetwork("intrinsic edges", nodes, edges);
     intEdgeQ->setEnabled(true);
     intEdgeQ->setColor(polyscope::render::RGB_ORANGE);
     intEdgeQ->setRadius(0.0005);
@@ -174,13 +168,49 @@ void visualizeIntrinsicEdges() {
 
 void functionCallback() {
 
+    if (ImGui::Button("Solve!")) {
+
+        // remove everything except for input curves
+        psMesh->removeAllQuantities();
+
+        switch (SOLVER_MODE) {
+            case (SolverMode::OriginalMesh): {
+                displayCurves(*geometry, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+                SWNSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
+                SWNSolver->approximateResidual = APPROXIMATE_RESIDUAL;
+                SWNSolver->epsilon = EPSILON;
+                CornerData<double> w;
+                if (DUAL_CHAIN.size() > 0) {
+                    w = SWNSolver->solve(DUAL_CHAIN);
+                } else if (curveHalfedges.size() > 0) {
+                    w = SWNSolver->solve(curveHalfedges);
+                } else {
+                    w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
+                }
+                psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
+                break;
+            }
+            case (SolverMode::IntrinsicMesh): {
+                // ensureHaveIntrinsicSolver();
+                // resetCurveOnIntrinsicTriangulation();
+                // intrinsicSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
+                // intrinsicSolver->approximateResidual = APPROXIMATE_RESIDUAL;
+                // intrinsicSolver->epsilon = EPSILON;
+                // CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
+                break;
+            }
+        }
+    }
+
     // Solve on original mesh;
     ImGui::RadioButton("Original mesh", &SOLVER_MODE, SolverMode::OriginalMesh);
     // Solve on an intrinsic mesh
     ImGui::RadioButton("Intrinsic mesh", &SOLVER_MODE, SolverMode::IntrinsicMesh);
 
     if (ImGui::TreeNode("Advanced solving options")) {
-        ImGui::Checkbox("Do homology correction", &DO_HOMOLOGY_CORRECTION);
+        ImGui::Checkbox("Solve for nonbounding loops", &DO_HOMOLOGY_CORRECTION);
+        ImGui::Checkbox("Use reduced-size linear program", &APPROXIMATE_RESIDUAL);
+        ImGui::InputFloat("epsilon", &EPSILON);
         ImGui::TreePop();
     }
 
@@ -213,8 +243,16 @@ int main(int argc, char** argv) {
 
     // Configure the argument parser
     args::ArgumentParser parser("Solve for surface winding number on a triangle mesh.");
+    args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::Positional<std::string> inputFilename(parser, "mesh", "A mesh file.");
-    args::Positional<std::string> curveFilename(parser, "curve", "A curve file.");
+    args::ValueFlag<std::string> curveFilename(parser, "curve", "An input curve file", {"curve", "c"});
+    args::ValueFlag<std::string> allowRemeshing(parser, "allowRemeshing", "Allow re-meshing of the input mesh.",
+                                                {"allowRemeshing", "m"});
+    args::ValueFlag<std::string> outputFilename(parser, "outputFilename", "File to save output mesh to.",
+                                                {"outputFilename", "o"});
+    args::ValueFlag<std::string> doHomologyCorrection(parser, "identifyNonbounding", "", {"identifyNonbounding", "h"});
+    args::ValueFlag<std::string> approximateResidual(parser, "approximateResidual", "", {"approximateResidual", "r"});
+
     args::Group group(parser);
 
     // Parse args
@@ -236,31 +274,53 @@ int main(int argc, char** argv) {
 
     // Load mesh
     MESH_FILEPATH = args::get(inputFilename);
+    std::string HOME_DIR = getHomeDirectory(MESH_FILEPATH); // extract home directory
+    OUTPUT_FILENAME = HOME_DIR + "output.obj";
     std::tie(mesh, geometry) = readSurfaceMesh(MESH_FILEPATH);
     // Read line objects, if they exist in mesh file.
-    readLines(*mesh, MESH_FILEPATH, CURVE_NODES, CURVE_EDGES);
+    readLines(*mesh, MESH_FILEPATH, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
 
     // Initialize polyscope
     polyscope::init();
 
     polyscope::state::userCallback = functionCallback;
 
+    // Register the mesh with polyscope
+    MESHNAME = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
+    psMesh = polyscope::registerSurfaceMesh(MESHNAME, geometry->inputVertexPositions, mesh->getFaceVertexList());
+    psMesh->setAllPermutations(polyscopePermutations(*mesh));
+
+    // Read curve & other arguments.
+    if (curveFilename) {
+        std::string CURVE_FILEPATH = args::get(curveFilename);
+        readCurves(*mesh, CURVE_FILEPATH, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+    }
+    if (allowRemeshing) {
+        ALLOW_REMESHING = isStringTrue(args::get(allowRemeshing));
+    }
+    if (outputFilename) {
+        OUTPUT_FILENAME = args::get(outputFilename);
+    }
+    if (doHomologyCorrection) {
+        DO_HOMOLOGY_CORRECTION = isStringTrue(args::get(doHomologyCorrection));
+    }
+    if (approximateResidual) {
+        APPROXIMATE_RESIDUAL = isStringTrue(args::get(approximateResidual));
+    }
+
     // Initialize solver.
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
 
-    // Register the mesh with polyscope
-    MESHNAME = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
-    psMesh = polyscope::registerSurfaceMesh(MESHNAME, geometry->inputVertexPositions, mesh->getFaceVertexList(),
-                                            polyscopePermutations(*mesh));
-
-    // Read curve.
-    if (curveFilename) {
-        std::string CURVE_FILEPATH = args::get(curveFilename);
-        readCurves(*mesh, CURVE_FILEPATH, CURVE_NODES, CURVE_EDGES);
-    }
-
     // Display curve.
-    displayCurves(*geometry, CURVE_NODES, CURVE_EDGES);
+    displayCurves(*geometry, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+
+    // Convert input curve to other forms, if applicable.
+    if (CURVE_EDGES.size() > 0) {
+        std::vector<Halfedge> curveHalfedges = convertToHalfedges(CURVE_NODES, CURVE_EDGES);
+        if (ALLOW_REMESHING && curveHalfedges.size() == 0) {
+            // TODO
+        }
+    }
 
     // // TODO: convert curves to halfedges, if applicable
     // if (curveHalfedges.size() == 0) curveHalfedges = setCurveHalfedges(curveNodes, curveEdges, true);

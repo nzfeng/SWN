@@ -24,20 +24,28 @@ int roundToNearestInteger(double x);
 
 // ===================== I/O
 
+/* Get home directory of a mesh file. */
+std::string getHomeDirectory(const std::string& filepath);
+
+bool isStringTrue(const std::string& input);
+
 Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
 
 SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
 
-std::vector<Halfedge> setCurveHalfedges(const std::vector<SurfacePoint>& curveNodes,
-                                        const std::vector<std::array<size_t, 2>>& curveEdges);
+std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveNodes,
+                                         const std::vector<std::array<size_t, 2>>& curveEdges);
 
-/* Read in curve, encoded as OBJ line objects. */
+/* Read in curve, encoded either as OBJ line objects, or as dual edges. */
 void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
-               std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
+               std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
+               int offset = -1);
 
-/* Read in curve data (from a file NOT containing mesh data), encoded as segments between barycentric points. */
+/* Read in curve data (from a file NOT containing mesh data), encoded either as segments between barycentric points, or
+ * as dual edges. */
 void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
-                std::vector<std::array<size_t, 2>>& curveEdges, int offset = -1);
+                std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
+                int offset = -1);
 
 // write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
 // loops)
@@ -75,4 +83,5 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
 // ===================== VISUALIZATION
 
 void displayCurves(const VertexPositionGeometry& geometry, const std::vector<SurfacePoint>& curveNodes,
-                   const std::vector<std::array<size_t, 2>>& curveEdges);
+                   const std::vector<std::array<size_t, 2>>& curveEdges,
+                   const std::vector<std::array<Face, 2>>& dualChain);

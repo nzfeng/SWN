@@ -16,6 +16,19 @@ int roundToNearestInteger(double x) {
 
 // ===================== I/O
 
+std::string getHomeDirectory(const std::string& filepath) {
+
+    std::string dir(filepath.begin(), filepath.begin() + filepath.find_last_of("/"));
+    return dir;
+}
+
+bool isStringTrue(const std::string& input) {
+
+    std::string data = input;
+    std::transform(data.begin(), data.end(), data.begin(), [](unsigned char c) { return std::tolower(c); });
+    return (data == "true" || data == "on");
+}
+
 Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB) {
 
     for (Halfedge he : vA.outgoingHalfedges()) {
@@ -49,8 +62,8 @@ SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh) {
  *
  * Return an empty vector if curve is not constrained to mesh edges.
  */
-std::vector<Halfedge> setCurveHalfedges(const std::vector<SurfacePoint>& curveNodes,
-                                        const std::vector<std::array<size_t, 2>>& curveEdges) {
+std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveNodes,
+                                         const std::vector<std::array<size_t, 2>>& curveEdges) {
 
     std::vector<Halfedge> curveHalfedges;
 
@@ -136,7 +149,8 @@ std::vector<Halfedge> setCurveHalfedges(const std::vector<SurfacePoint>& curveNo
 
 /* Read in curve, encoded as OBJ line objects. */
 void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
-               std::vector<std::array<size_t, 2>>& curveEdges, int offset) {
+               std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
+               int offset) {
 
     std::ifstream curr_file(filepath.c_str());
     std::string line;
@@ -171,6 +185,18 @@ void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surfa
                     curveEdges.push_back({M + i, M + (i + 1)});
                 }
                 curveNodes.insert(curveNodes.end(), nodes.begin(), nodes.end());
+            } else if (X == "c") {
+                std::vector<size_t> indices;
+                while (true) {
+                    if (iss.eof()) break;
+                    iss >> idx;
+                    idx += offset;
+                    indices.push_back(idx);
+                }
+                size_t N = indices.size();
+                for (size_t i = 0; i < N - 1; i++) {
+                    dualChain.push_back({mesh.face(indices[i]), mesh.face(indices[i + 1])});
+                }
             } else if (X == "#offset") {
                 iss >> offset;
             }
@@ -183,7 +209,8 @@ void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surfa
 
 /* Read in curve data from a separate file, encoded as segments between barycentric points. */
 void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
-                std::vector<std::array<size_t, 2>>& curveEdges, int offset) {
+                std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
+                int offset) {
 
     std::ifstream curr_file(filepath.c_str());
     std::string line;
@@ -232,6 +259,18 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
                 for (size_t i = 0; i < N - 1; i++) {
                     curveEdges.push_back({indices[i], indices[i + 1]});
                 }
+            } else if (X == "c") {
+                std::vector<size_t> indices;
+                while (true) {
+                    if (iss.eof()) break;
+                    iss >> idx;
+                    idx += offset;
+                    indices.push_back(idx);
+                }
+                size_t N = indices.size();
+                for (size_t i = 0; i < N - 1; i++) {
+                    dualChain.push_back({mesh.face(indices[i]), mesh.face(indices[i + 1])});
+                }
             } else if (X == "#offset") {
                 iss >> offset;
             }
@@ -249,9 +288,26 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
 // ===================== VISUALIZATION
 
 void displayCurves(const VertexPositionGeometry& geometry, const std::vector<SurfacePoint>& curveNodes,
-                   const std::vector<std::array<size_t, 2>>& curveEdges) {
+                   const std::vector<std::array<size_t, 2>>& curveEdges,
+                   const std::vector<std::array<Face, 2>>& dualChain) {
 
-    std::vector<Vector3> nodes;
-    for (const SurfacePoint& p : curveNodes) nodes.push_back(p.interpolate(geometry.vertexPositions));
-    polyscope::registerCurveNetwork("input curve", nodes, curveEdges)->setColor({0, 0, 0})->setEnabled(true);
+    if (curveEdges.size() > 0) {
+        std::vector<Vector3> nodes;
+        for (const SurfacePoint& p : curveNodes) nodes.push_back(p.interpolate(geometry.vertexPositions));
+        polyscope::registerCurveNetwork("input curve", nodes, curveEdges)->setColor({0, 0, 0})->setEnabled(true);
+    }
+    if (dualChain.size() > 0) {
+        std::vector<Vector3> nodes;
+        std::vector<std::array<size_t, 2>> edges;
+        SurfaceMesh& mesh = geometry.mesh;
+        polyscope::SurfaceMesh* psMesh = polyscope::getSurfaceMesh("input mesh");
+        glm::vec3 baseColor = psMesh->getSurfaceColor();
+        FaceData<glm::vec3> fColors(mesh, baseColor);
+        for (const auto& pair : dualChain) {
+            fColors[pair[0]] = {1., 0.388235, 0.278431}; // orange for "outside"
+            fColors[pair[1]] = {0.294118, 0., 0.509804}; // indigo for "inside"
+        }
+        psMesh->addFaceColorQuantity("input dual chain", fColors)->setEnabled(true);
+        polyscope::registerCurveNetwork("input curve edges", nodes, edges)->setColor({0, 0, 0})->setEnabled(true);
+    }
 }
