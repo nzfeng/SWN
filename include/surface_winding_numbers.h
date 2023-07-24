@@ -27,6 +27,10 @@
 #include <CoMISo/NSolver/VariableType.hh>
 #include <CoMISo/Utils/StopWatch.hh>
 
+// for debugging
+#include "polyscope/polyscope.h"
+#include "polyscope/surface_mesh.h"
+
 // Implements the Surface Winding Numbers (SWN) algorithm from
 //      Winding Number on Discrete Surfaces
 //      Nicole Feng, Mark Gillespie, Keenan Crane

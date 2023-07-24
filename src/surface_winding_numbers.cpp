@@ -12,6 +12,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
 
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
+    VertexData<bool> isInteriorVertex(mesh, false);
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
@@ -37,9 +38,10 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
             for (size_t i = 0; i < mag; i++) endpoints.emplace_back(v, sgn);
         } else if (v.isManifold()) {
             for (Halfedge he : v.outgoingHalfedges()) {
-                if (abs(chain[geom.edgeIndices[he.edge()]] > eps)) {
+                if (abs(chain[geom.edgeIndices[he.edge()]]) > eps) {
                     interiorVertices.push_back(v);
                     outgoingHalfedgeOnCurve.insert(std::make_pair(v, he));
+                    isInteriorVertex[v] = true;
                     break;
                 }
             }
@@ -49,6 +51,10 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     geom.unrequireEdgeIndices();
 
     CornerData<double> c = computeReducedCoordinates(chain, interiorVertices, outgoingHalfedgeOnCurve);
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex);
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
+    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("chain", chain);
+    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("reducedCoordinates", c);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
 
     if (!simplyConnected && doHomologyCorrection) {
@@ -128,6 +134,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
             if (!curr.edge().isBoundary()) {
                 double jump = chain[geom.edgeIndices[curr.edge()]];
                 cumJump += (curr.orientation() ? jump : -jump);
+                reducedCoordinates[curr.corner()] = cumJump;
             }
             curr = curr.next().next().twin();
         } while (curr != start);

@@ -29,13 +29,6 @@ std::string getHomeDirectory(const std::string& filepath);
 
 bool isStringTrue(const std::string& input);
 
-Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
-
-SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
-
-std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveNodes,
-                                         const std::vector<std::array<size_t, 2>>& curveEdges);
-
 /* Read in curve, encoded either as OBJ line objects, or as dual edges. */
 void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
                std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
@@ -49,6 +42,21 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
 
 // write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
 // loops)
+
+// ===================== CURVE MANIPULATION
+
+Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
+
+SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
+
+std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveNodes,
+                                         const std::vector<std::array<size_t, 2>>& curveEdges);
+
+Vector<int> convertToChain(IntrinsicGeometryInterface& geom, const std::vector<Halfedge>& curve);
+
+std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface& geom,
+                                                      const std::vector<Halfedge>& curveHalfedges);
+
 
 // ===================== MESH MUTATION
 
