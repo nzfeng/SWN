@@ -376,8 +376,8 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 
 // ===================== VISUALIZATION
 
-void displayCurves(const VertexPositionGeometry& geometry, const std::vector<SurfacePoint>& curveNodes,
-                   const std::vector<std::array<size_t, 2>>& curveEdges,
+void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Halfedge>& curveHalfedges,
+                   const std::vector<SurfacePoint>& curveNodes, const std::vector<std::array<size_t, 2>>& curveEdges,
                    const std::vector<std::array<Face, 2>>& dualChain) {
 
     if (curveEdges.size() > 0) {
@@ -398,5 +398,16 @@ void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Sur
         }
         psMesh->addFaceColorQuantity("input dual chain", fColors)->setEnabled(true);
         polyscope::registerCurveNetwork("input curve edges", nodes, edges)->setColor({0, 0, 0})->setEnabled(true);
+    }
+    if (curveHalfedges.size() > 0) {
+        std::vector<Vector3> nodes;
+        std::vector<std::array<size_t, 2>> edges;
+        for (const Halfedge& he : curveHalfedges) {
+            size_t N = nodes.size();
+            nodes.push_back(geometry.vertexPositions[he.tailVertex()]);
+            nodes.push_back(geometry.vertexPositions[he.tipVertex()]);
+            edges.push_back({N, N + 1});
+        }
+        polyscope::registerCurveNetwork("input curve", nodes, edges)->setColor({0, 0, 0})->setEnabled(true);
     }
 }

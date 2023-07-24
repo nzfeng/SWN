@@ -46,8 +46,8 @@ int MAX_EDGE_SPLITS = 3;
 // == program parameters
 std::string MESHNAME = "input mesh";
 std::string MESHROOT, MESH_FILEPATH, CURVE_FILEPATH;
-enum SolverMode { OriginalMesh = 0, IntrinsicMesh };
-int SOLVER_MODE = SolverMode::OriginalMesh;
+enum SolverMode { ExtrinsicMesh = 0, IntrinsicMesh };
+int SOLVER_MODE = SolverMode::ExtrinsicMesh;
 bool VIS_INTRINSIC_MESH = false;
 
 // == curve data
@@ -319,17 +319,23 @@ void functionCallback() {
         psMesh->removeAllQuantities();
 
         switch (SOLVER_MODE) {
-            case (SolverMode::OriginalMesh): {
-                displayCurves(*geometry, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+            case (SolverMode::ExtrinsicMesh): {
+                std::cerr << "m0" << std::endl;
+                displayCurves(getGeom(), USING_MANIFOLD_MESH ? curveHalfedgesOnManifold : curveHalfedges, CURVE_NODES,
+                              CURVE_EDGES, DUAL_CHAIN);
+                std::cerr << "m1" << std::endl;
                 SWNSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
                 SWNSolver->approximateResidual = APPROXIMATE_RESIDUAL;
                 SWNSolver->epsilon = EPSILON;
                 CornerData<double> w;
                 if (DUAL_CHAIN.size() > 0) {
+                    std::cerr << "m2" << std::endl;
                     w = SWNSolver->solve(DUAL_CHAIN);
                 } else if (curveHalfedges.size() > 0) {
+                    std::cerr << "m3" << std::endl;
                     w = SWNSolver->solve(curveHalfedges);
                 } else {
+                    std::cerr << "m4" << std::endl;
                     w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 }
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
@@ -348,7 +354,7 @@ void functionCallback() {
     }
 
     // Solve on original mesh;
-    ImGui::RadioButton("Original mesh", &SOLVER_MODE, SolverMode::OriginalMesh);
+    ImGui::RadioButton("Extrinsic mesh", &SOLVER_MODE, SolverMode::ExtrinsicMesh);
     // Solve on an intrinsic mesh
     ImGui::RadioButton("Intrinsic mesh", &SOLVER_MODE, SolverMode::IntrinsicMesh);
 
@@ -457,7 +463,7 @@ int main(int argc, char** argv) {
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
 
     // Display curve.
-    displayCurves(*geometry, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+    displayCurves(*geometry, curveHalfedges, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
 
     // Convert input curve to other forms, if applicable.
     if (CURVE_EDGES.size() > 0) {

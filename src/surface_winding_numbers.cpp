@@ -131,7 +131,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
         Halfedge curr = start;
         double cumJump = 0.; // cumulative jump
         do {
-            if (!curr.edge().isBoundary()) {
+            if (!curr.isInterior()) {
                 double jump = chain[geom.edgeIndices[curr.edge()]];
                 cumJump += (curr.orientation() ? jump : -jump);
                 reducedCoordinates[curr.corner()] = cumJump;

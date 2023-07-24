@@ -90,6 +90,6 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 
 // ===================== VISUALIZATION
 
-void displayCurves(const VertexPositionGeometry& geometry, const std::vector<SurfacePoint>& curveNodes,
-                   const std::vector<std::array<size_t, 2>>& curveEdges,
+void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Halfedge>& curveHalfedges,
+                   const std::vector<SurfacePoint>& curveNodes, const std::vector<std::array<size_t, 2>>& curveEdges,
                    const std::vector<std::array<Face, 2>>& dualChain);
