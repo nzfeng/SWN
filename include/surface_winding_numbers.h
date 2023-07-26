@@ -70,11 +70,10 @@ class SurfaceWindingNumbersSolver {
 
     /* Curve(s) is specified as an unordered collection of edges between barycentric points on the mesh.
      *
-     * If mutateMesh = true, the mesh is re-meshed so that the curve conforms to mesh edges. Otherwise, the jump Laplace
-     * equation is solved using a Poisson formulation, but homology correction is no longer possible.
+     * The jump Laplace equation is solved using a Poisson formulation, but homology correction is no longer possible.
      */
     CornerData<double> solve(const std::vector<SurfacePoint>& curveNodes,
-                             const std::vector<std::array<size_t, 2>>& curveEdges, bool mutateMesh = true) const;
+                             const std::vector<std::array<size_t, 2>>& curveEdges) const;
 
     // === Parameters
     double epsilon = 1e-2;

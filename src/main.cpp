@@ -107,17 +107,15 @@ std::vector<Halfedge> remeshToConforming() {
     ensureHaveManifoldMesh();
 
     MutationManager mm(*manifoldMesh, *manifoldGeom);
-    std::cerr << "MutationManager constructed" << std::endl;
 
     // Need to re-interpret curveNodes in terms of manifold mesh.
     std::vector<SurfacePoint> newCurveNodes;
     for (const auto& pt : CURVE_NODES) {
         newCurveNodes.push_back(reinterpretTo(pt, *manifoldMesh));
     }
-    std::cerr << "curve re-interpreted" << std::endl;
 
     std::vector<Halfedge> heOnCurve = mm.cutAlongPath(newCurveNodes, CURVE_EDGES);
-    std::cerr << "mesh cut along " << heOnCurve.size() << " new edges" << std::endl;
+    std::cerr << "Mesh cut along " << heOnCurve.size() << " new edges." << std::endl;
 
     // Keep track of the halfedges in the new mesh that segments correspond to, before compression.
     EdgeData<int> chain(*manifoldMesh, convertToChain(*manifoldGeom, heOnCurve));
@@ -127,7 +125,7 @@ std::vector<Halfedge> remeshToConforming() {
     for (Face f : manifoldMesh->faces()) {
         manifoldMesh->triangulate(f);
     }
-    std::cerr << "mesh triangulated" << std::endl;
+    std::cerr << "Mesh re-triangulated." << std::endl;
 
     manifoldMesh->compress();
 
@@ -334,8 +332,11 @@ void functionCallback() {
                 } else if (curveHalfedges.size() > 0) {
                     std::cerr << "m3" << std::endl;
                     w = SWNSolver->solve(curveHalfedges);
-                } else {
+                } else if (curveHalfedgesOnManifold.size() > 0) {
                     std::cerr << "m4" << std::endl;
+                    w = SWNSolver->solve(curveHalfedgesOnManifold);
+                } else {
+                    std::cerr << "m5" << std::endl;
                     w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 }
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);

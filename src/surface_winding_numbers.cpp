@@ -12,7 +12,8 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
 
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
-    VertexData<bool> isInteriorVertex(mesh, false);
+    VertexData<bool> isInteriorVertex(mesh, false); // debugging
+    EdgeData<bool> outgoingEdge(mesh, false);       // debugging
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
@@ -41,6 +42,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
                 if (abs(chain[geom.edgeIndices[he.edge()]]) > eps) {
                     interiorVertices.push_back(v);
                     outgoingHalfedgeOnCurve.insert(std::make_pair(v, he));
+                    outgoingEdge[he.edge()] = true;
                     isInteriorVertex[v] = true;
                     break;
                 }
@@ -55,6 +57,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
     polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("chain", chain);
     polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("reducedCoordinates", c);
+    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("outgoingHalfedgeOnCurve", outgoingEdge);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
 
     if (!simplyConnected && doHomologyCorrection) {
@@ -97,16 +100,14 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Halfedge
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::array<Face, 2>>& curve) const {
 
     // TODO
+    return CornerData<double>(mesh, 0);
 }
 
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<SurfacePoint>& curveNodes,
-                                                      const std::vector<std::array<size_t, 2>>& curveEdges,
-                                                      bool mutateMesh) const {
+                                                      const std::vector<std::array<size_t, 2>>& curveEdges) const {
 
-    if (mutateMesh) {
-        // TODO
-    }
     // TODO: Call Poisson solver
+    return CornerData<double>(mesh, 0);
 }
 
 
@@ -131,7 +132,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
         Halfedge curr = start;
         double cumJump = 0.; // cumulative jump
         do {
-            if (!curr.isInterior()) {
+            if (curr.isInterior()) {
                 double jump = chain[geom.edgeIndices[curr.edge()]];
                 cumJump += (curr.orientation() ? jump : -jump);
                 reducedCoordinates[curr.corner()] = cumJump;
@@ -170,13 +171,24 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
+    std::cerr << "[b]: " << b.norm() << std::endl;                   // debugging
+    std::cerr << "[u_0]: " << u0.norm() << std::endl;                // debugging
+    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
+    Vector<double> u0vertices(mesh.nVertices());
+    Vector<double> bvertices(mesh.nVertices());
+    for (Vertex v : mesh.vertices()) {
+        u0vertices[v.getIndex()] = u0[DOFindex[v]];
+        bvertices[v.getIndex()] = b[DOFindex[v]];
+    }
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("b", bvertices);    // debugging
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("u_0", u0vertices); // debugging
 
     // Apply shifts to recover u.
     CornerData<double> u(mesh);
     geom.requireVertexIndices();
     for (Vertex v : mesh.vertices()) {
-        size_t vIdx = geom.vertexIndices[v];
-        for (Corner c : v.adjacentCorners()) u[c] = u0[vIdx] + reducedCoordinates[c];
+        size_t idx = DOFindex[v];
+        for (Corner c : v.adjacentCorners()) u[c] = u0[idx] + reducedCoordinates[c];
     }
     geom.unrequireVertexIndices();
     return u;
@@ -263,10 +275,16 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
     Vector<double> RHS = Vector<double>::Zero(nDOFs);
     for (const Vertex& v : interiorVertices) {
         for (Halfedge he : v.outgoingHalfedges()) {
-            Corner c = he.corner();
-            double w = geom.halfedgeCotanWeights[he];
-            RHS[DOFindex[v]] -= w * reducedCoordinates[c];
-            RHS[DOFindex[he.tipVertex()]] += w * reducedCoordinates[c];
+            if (isInteriorEndpoint[he.tipVertex()]) continue;
+            double cumJump = reducedCoordinates[he.corner()];
+            double wA = geom.halfedgeCotanWeights[he];
+            double wB = geom.halfedgeCotanWeights[he.twin()];
+            size_t vI = DOFindex[v];
+            size_t vJ = DOFindex[he.tipVertex()];
+            RHS[vI] -= wA * cumJump;
+            RHS[vJ] += wA * cumJump;
+            RHS[vI] -= wB * cumJump;
+            RHS[vJ] += wB * cumJump;
         }
     }
     return RHS;
