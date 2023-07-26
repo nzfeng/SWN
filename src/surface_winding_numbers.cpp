@@ -25,7 +25,8 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     //  - store an arbitrary outgoing cut halfedge per interior vertex
     //  - curve endpoints and their signs.
     std::map<Vertex, Halfedge> outgoingHalfedgeOnCurve;
-    // TODO: If boundary vertex, outgoingHalfedge should be on the most CCW corner
+    // TODO: If boundary vertex, outgoingHalfedge should be on the most CW corner
+    // TODO: Did I handle chain edges on the boundary yet?
     std::vector<std::pair<Vertex, bool>> endpoints;
     geom.requireVertexIndices();
     geom.requireEdgeIndices();
@@ -52,19 +53,28 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     geom.unrequireEdgeIndices();
 
     CornerData<double> c = computeReducedCoordinates(chain, interiorVertices, outgoingHalfedgeOnCurve);
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex);
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex); // debugging
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
-    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("chain", chain);
-    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("reducedCoordinates", c);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
-
+    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("u", w); // debugging
+    std::cerr << "u min: " << w.toVector().minCoeff() << "\tu max: " << w.toVector().maxCoeff()
+              << std::endl; // debugging
     if (!simplyConnected && doHomologyCorrection) {
+        std::cerr << "Doing homology correction..." << std::endl;
         Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, w);
-        if (isCurveClosed) gamma = harmonicComponent(gamma);
+        polyscope::getSurfaceMesh("input mesh")
+            ->addOneFormIntrinsicVectorQuantity("omega", gamma, polyscopeEdgeOrientations(mesh)); // debugging
+        if (!isCurveClosed) gamma = harmonicComponent(gamma);
+        polyscope::getSurfaceMesh("input mesh")
+            ->addOneFormIntrinsicVectorQuantity("gamma", gamma, polyscopeEdgeOrientations(mesh)); // debugging
         CornerData<double> v =
             approximateResidual ? approximateResidualFunction(chain, endpoints, gamma) : residualFunction(chain, gamma);
-        c = subtractJumpDerivative(interiorVertices, isInteriorEndpoint, v, c);
-        CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
+        polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v", v); // debugging
+        std::cerr << "v min: " << v.toVector().minCoeff() << "\tv max: " << v.toVector().maxCoeff()
+                  << std::endl; // debugging
+        c = subtractJumpDerivative(chain, interiorVertices, isInteriorEndpoint, outgoingHalfedgeOnCurve, v);
+        polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c); // debugging
+        w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
     }
     // TODO: Store intermediate computed quantities as member variables.
     return w;
@@ -131,8 +141,11 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
         double cumJump = 0.; // cumulative jump
         do {
             if (curr.isInterior()) {
-                double jump = chain[geom.edgeIndices[curr.edge()]];
-                cumJump += (curr.orientation() ? jump : -jump);
+                // always have a jump of 0 across edges on the boundary
+                if (!curr.edge().isBoundary()) {
+                    double jump = chain[geom.edgeIndices[curr.edge()]];
+                    cumJump += (curr.orientation() ? jump : -jump);
+                }
                 reducedCoordinates[curr.corner()] = cumJump;
             }
             curr = curr.next().next().twin(); // go counterclockwise
@@ -169,18 +182,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
-    std::cerr << "[b]: " << b.norm() << std::endl;                                            // debugging
-    std::cerr << "[u_0]: " << u0.norm() << std::endl;                                         // debugging
-    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl;                          // debugging
-    std::cerr << "u_0 min: " << u0.minCoeff() << "\tu_0 max: " << u0.maxCoeff() << std::endl; // debugging
-    Vector<double> u0vertices(mesh.nVertices());
-    Vector<double> bvertices(mesh.nVertices());
-    for (Vertex v : mesh.vertices()) {
-        u0vertices[v.getIndex()] = u0[DOFindex[v]];
-        bvertices[v.getIndex()] = b[DOFindex[v]];
-    }
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("b", bvertices);    // debugging
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("u_0", u0vertices); // debugging
+    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
 
     // Apply shifts to recover u.
     CornerData<double> u(mesh);
@@ -765,20 +767,41 @@ std::vector<Halfedge> SurfaceWindingNumbersSolver::dijkstraPath(IntrinsicGeometr
  * Output: Updated reduced coordinates encoding new jump constraints for the jump Laplace equation.
  */
 CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
-    const std::vector<Vertex>& interiorVertices, const VertexData<bool>& isInteriorEndpoint,
-    const CornerData<double>& resid, const CornerData<double>& reducedCoordinates) const {
+    const Vector<double>& chain, const std::vector<Vertex>& interiorVertices,
+    const VertexData<bool>& isInteriorEndpoint, const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve,
+    const CornerData<double>& resid) const {
 
-    CornerData<double> updatedCoords(mesh, 0);
-    for (const Vertex& v : interiorVertices) {
-        if (!v.isManifold()) continue;
-        for (Halfedge he : v.outgoingHalfedges()) {
-            if (isInteriorEndpoint[he.tipVertex()] || he.edge().isBoundary()) continue;
-            Corner cA = he.corner();
-            Corner cB = he.twin().next().corner();
-            updatedCoords[cA] = reducedCoordinates[cA] - (resid[cA] - resid[cB]);
-        }
+    // Vector<double> updatedChain = chain;
+    // for (const auto& vi : interiorVertices) {
+    //     //
+    // }
+    // CornerData<double> c = computeReducedCoordinates(updatedChain, interiorVertices, outgoingHalfedgeOnCurve);
+    // return c;
+
+    geom.requireEdgeIndices();
+    CornerData<double> reducedCoordinates(mesh, 0);
+    for (const auto& vi : interiorVertices) {
+        // we should have already filtered for nonmanifold vertices when we computed interiorVertices
+        Halfedge start = outgoingHalfedgeOnCurve.at(vi);
+        Halfedge curr = start;
+        double cumJump = 0.; // cumulative jump
+        do {
+            if (curr.isInterior()) {
+                if (!curr.edge().isBoundary()) {
+                    // always have a jump of 0 across edges on the boundary
+                    double Ju = chain[geom.edgeIndices[curr.edge()]];
+                    if (!curr.orientation()) Ju = -Ju;
+                    double Jv = resid[curr.corner()] - resid[curr.twin().next().corner()];
+                    double jump = Ju - Jv;
+                    cumJump += jump;
+                }
+                reducedCoordinates[curr.corner()] = cumJump;
+            }
+            curr = curr.next().next().twin(); // go counterclockwise
+        } while (curr != start);
     }
-    return updatedCoords;
+    geom.unrequireEdgeIndices();
+    return reducedCoordinates;
 }
 
 
@@ -882,7 +905,7 @@ SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterf
     ensureHaveCoexactSolver();
 
     // Determine whether the mesh is simply-connected.
-    bool simplyConnected = false;
+    simplyConnected = false;
     if (mesh.isManifold() && mesh.nConnectedComponents() == 1) {
         size_t chi = mesh.nVertices() + mesh.nFaces() - mesh.nEdges();
         simplyConnected = (chi == 1 || chi == 2);

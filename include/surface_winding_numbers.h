@@ -133,10 +133,10 @@ class SurfaceWindingNumbersSolver {
     std::vector<Halfedge> dijkstraPath(IntrinsicGeometryInterface& geom, const Vertex& startVert,
                                        const std::set<Vertex>& endVerts) const;
 
-    CornerData<double> subtractJumpDerivative(const std::vector<Vertex>& interiorVertices,
+    CornerData<double> subtractJumpDerivative(const Vector<double>& chain, const std::vector<Vertex>& interiorVertices,
                                               const VertexData<bool>& isInteriorEndpoint,
-                                              const CornerData<double>& resid,
-                                              const CornerData<double>& reducedCoordinates) const;
+                                              const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve,
+                                              const CornerData<double>& resid) const;
 
     // === Auxiliary functions
 
