@@ -13,7 +13,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
     VertexData<bool> isInteriorVertex(mesh, false); // debugging
-    EdgeData<bool> outgoingEdge(mesh, false);       // debugging
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
@@ -26,6 +25,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     //  - store an arbitrary outgoing cut halfedge per interior vertex
     //  - curve endpoints and their signs.
     std::map<Vertex, Halfedge> outgoingHalfedgeOnCurve;
+    // TODO: If boundary vertex, outgoingHalfedge should be on the most CCW corner
     std::vector<std::pair<Vertex, bool>> endpoints;
     geom.requireVertexIndices();
     geom.requireEdgeIndices();
@@ -42,7 +42,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
                 if (abs(chain[geom.edgeIndices[he.edge()]]) > eps) {
                     interiorVertices.push_back(v);
                     outgoingHalfedgeOnCurve.insert(std::make_pair(v, he));
-                    outgoingEdge[he.edge()] = true;
                     isInteriorVertex[v] = true;
                     break;
                 }
@@ -57,7 +56,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
     polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("chain", chain);
     polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("reducedCoordinates", c);
-    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("outgoingHalfedgeOnCurve", outgoingEdge);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
 
     if (!simplyConnected && doHomologyCorrection) {
@@ -137,7 +135,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
                 cumJump += (curr.orientation() ? jump : -jump);
                 reducedCoordinates[curr.corner()] = cumJump;
             }
-            curr = curr.next().next().twin();
+            curr = curr.next().next().twin(); // go counterclockwise
         } while (curr != start);
     }
     geom.unrequireEdgeIndices();
@@ -171,9 +169,10 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
-    std::cerr << "[b]: " << b.norm() << std::endl;                   // debugging
-    std::cerr << "[u_0]: " << u0.norm() << std::endl;                // debugging
-    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
+    std::cerr << "[b]: " << b.norm() << std::endl;                                            // debugging
+    std::cerr << "[u_0]: " << u0.norm() << std::endl;                                         // debugging
+    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl;                          // debugging
+    std::cerr << "u_0 min: " << u0.minCoeff() << "\tu_0 max: " << u0.maxCoeff() << std::endl; // debugging
     Vector<double> u0vertices(mesh.nVertices());
     Vector<double> bvertices(mesh.nVertices());
     for (Vertex v : mesh.vertices()) {
@@ -276,15 +275,17 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
     for (const Vertex& v : interiorVertices) {
         for (Halfedge he : v.outgoingHalfedges()) {
             if (isInteriorEndpoint[he.tipVertex()]) continue;
+            Halfedge heB = he.next().next();
             double cumJump = reducedCoordinates[he.corner()];
             double wA = geom.halfedgeCotanWeights[he];
-            double wB = geom.halfedgeCotanWeights[he.twin()];
+            double wB = geom.halfedgeCotanWeights[heB];
             size_t vI = DOFindex[v];
             size_t vJ = DOFindex[he.tipVertex()];
+            size_t vK = DOFindex[heB.tailVertex()];
             RHS[vI] -= wA * cumJump;
             RHS[vJ] += wA * cumJump;
             RHS[vI] -= wB * cumJump;
-            RHS[vJ] += wB * cumJump;
+            RHS[vK] += wB * cumJump;
         }
     }
     return RHS;

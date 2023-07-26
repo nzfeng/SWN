@@ -340,6 +340,8 @@ void functionCallback() {
                     w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 }
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
+                Vector<double> wVector = w.toVector();
+                std::cerr << "w min: " << wVector.minCoeff() << "\tw max: " << wVector.maxCoeff() << std::endl;
                 break;
             }
             case (SolverMode::IntrinsicMesh): {
