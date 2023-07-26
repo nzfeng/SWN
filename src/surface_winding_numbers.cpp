@@ -75,6 +75,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
         c = subtractJumpDerivative(chain, interiorVertices, isInteriorEndpoint, outgoingHalfedgeOnCurve, v);
         polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c); // debugging
         w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
+        // TODO: Do rounding procedure
     }
     // TODO: Store intermediate computed quantities as member variables.
     return w;

@@ -163,6 +163,10 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
     }
 }
 
+// TODO: texture exporting
+
+// TODO: nice curve exporting
+
 
 // ===================== CURVE MANIPULATION
 

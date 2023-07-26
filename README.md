@@ -24,6 +24,7 @@ If this code contributes to academic work, please cite as:
 }
 ```
 TODO: Fill in article numbers.
+TODO: Document export functions.
 
 # Getting started
 
@@ -36,7 +37,7 @@ mkdir build
 cd build
 cmake -DCOMISO_BUILD_WITHOUT_BOOST=On -DCMAKE_BUILD_TYPE=Release ..
 make -j8 # or however many cores you have or want to use
-bin/main /path/to/mesh /path/to/curve --viz
+bin/main /path/to/mesh --c=/path/to/curve --viz
 ```
 
 A Polyscope GUI will open:
@@ -77,13 +78,19 @@ For better visualization of the solution around curve endpoints, we perform proj
 
 By default, we output texture coordinates in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures you can interpolate the 3d coordinates linearly across each triangle. Then, for each pixel you perform a homogeneous divide, dividing the first two coordinates by the last coordinate to obtain the final uv texture coordinates. This can be done e.g. in a shader or via shader nodes in Blender (see `Example.blend` for an example).
 
-## Remeshing
+## Re-meshing
 
 Depending on the curve input, the surface may need to be re-meshed for optimal output.
 
-SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but homology correction is no longer possible.
+First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but homology correction is no longer possible.
 
 Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. If `--allowRemeshing=true`, such edges will be subdivided so that these parts of the curve will not be ignored.
+
+## Intrinsic re-meshing
+
+The GUI can perform intrinsic re-meshing, for example generating an intrinsic Delaunay triangulation for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export TODO
+
+Note: Only manifold meshes can be intrinsically re-triangulated.
 
 # Visualization
 
