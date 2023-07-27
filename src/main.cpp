@@ -1,3 +1,5 @@
+#include "geometrycentral/surface/transfer_functions.h"
+
 #include "args/args.hxx"
 #include "imgui.h"
 
@@ -37,7 +39,7 @@ bool APPROXIMATE_RESIDUAL = false;
 std::string OUTPUT_FILENAME;
 float EPSILON = 1e-2;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
-float REFINE_ANGLE_THRESH = 30.;
+float REFINE_ANGLE_THRESH = 25.;
 int MAX_INSERTIONS = -1;
 bool USING_MANIFOLD_MESH = false; // if using the re-meshed (manifold) mesh
 bool USE_SPECIAL_BASES = true;
@@ -73,6 +75,7 @@ void setManifoldMesh() {
     SWNSolver.reset(new SurfaceWindingNumbersSolver(*manifoldGeom));
     psMesh = polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->vertexPositions, manifoldMesh->getFaceVertexList());
     psMesh->setAllPermutations(polyscopePermutations(*manifoldMesh));
+    // TODO: reinterpret dual chain
 }
 
 void ensureHaveManifoldMesh() {
@@ -89,10 +92,6 @@ void ensureHaveManifoldMesh() {
         manifoldGeom = geometry->reinterpretTo(*manifoldMesh);
         manifoldGeom->refreshQuantities();
     }
-
-    psMesh =
-        polyscope::registerSurfaceMesh(MESHNAME, manifoldGeom->inputVertexPositions, manifoldMesh->getFaceVertexList());
-    psMesh->setAllPermutations(polyscopePermutations(*manifoldMesh));
 }
 
 /*
@@ -278,6 +277,10 @@ void ensureHaveIntrinsicTriangulation() {
     }
 }
 
+void resetCurveOnIntrinsicTriangulation() {
+    curveHalfedgesOnIntrinsic = determineHalfedgesInIntrinsicTriangulation(*intTri, curveHalfedgesOnManifold);
+}
+
 void ensureHaveIntrinsicSolver() {
 
     ensureHaveIntrinsicTriangulation();
@@ -309,6 +312,26 @@ void visualizeIntrinsicEdges() {
     intEdgeQ->setRadius(0.0005);
 }
 
+/*
+ * Display CornerData quantity on the common subdivision of an intrinsic triangulation.
+ */
+void visualizeIntrinsicSolution(const CornerData<double>& w, const std::string& name) {
+
+    CommonSubdivision& cs = intTri->getCommonSubdivision();
+    cs.constructMesh();
+    // Linearly interpolate data from intrinsic mesh to the common subdivision.
+    CornerData<double> cs_w = interpolateAcrossB(cs, w);
+
+    ManifoldSurfaceMesh& csMesh = *cs.mesh;
+    VertexData<Vector3> csPositions = cs.interpolateAcrossA(manifoldGeom->vertexPositions);
+
+    // Register and display with Polyscope
+    psCsMesh = polyscope::registerSurfaceMesh("common subdivision", csPositions, csMesh.getFaceVertexList(),
+                                              polyscopePermutations(csMesh));
+    psCsMesh->setEnabled(true);
+    psCsMesh->addCornerScalarQuantity(name, cs_w)->setEnabled(true);
+}
+
 void functionCallback() {
 
     if (ImGui::Button("Solve!")) {
@@ -329,28 +352,33 @@ void functionCallback() {
                 if (DUAL_CHAIN.size() > 0) {
                     std::cerr << "m2" << std::endl;
                     w = SWNSolver->solve(DUAL_CHAIN);
-                } else if (curveHalfedges.size() > 0) {
+                } else if (!USING_MANIFOLD_MESH && curveHalfedges.size() > 0) {
                     std::cerr << "m3" << std::endl;
                     w = SWNSolver->solve(curveHalfedges);
-                } else if (curveHalfedgesOnManifold.size() > 0) {
+                } else if (USING_MANIFOLD_MESH && curveHalfedgesOnManifold.size() > 0) {
                     std::cerr << "m4" << std::endl;
                     w = SWNSolver->solve(curveHalfedgesOnManifold);
                 } else {
                     std::cerr << "m5" << std::endl;
                     w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 }
+                std::cerr << "solved" << std::endl;
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
                 Vector<double> wVector = w.toVector();
                 std::cerr << "w min: " << wVector.minCoeff() << "\tw max: " << wVector.maxCoeff() << std::endl;
                 break;
             }
             case (SolverMode::IntrinsicMesh): {
-                // ensureHaveIntrinsicSolver();
-                // resetCurveOnIntrinsicTriangulation();
-                // intrinsicSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
-                // intrinsicSolver->approximateResidual = APPROXIMATE_RESIDUAL;
-                // intrinsicSolver->epsilon = EPSILON;
-                // CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
+                ensureHaveIntrinsicSolver();
+                resetCurveOnIntrinsicTriangulation();
+                intrinsicSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
+                intrinsicSolver->approximateResidual = APPROXIMATE_RESIDUAL;
+                intrinsicSolver->epsilon = EPSILON;
+                CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
+                Vector<double> wVector = w.toVector();
+                std::cerr << "w min: " << wVector.minCoeff() << "\tw max: " << wVector.maxCoeff() << std::endl;
+                visualizeIntrinsicSolution(w, "w");
+                // transferBtoA(intTri, f_intrinsic, TransferMethod::L2);
                 break;
             }
         }

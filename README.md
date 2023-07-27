@@ -11,24 +11,27 @@ If this code contributes to academic work, please cite as:
 ```bibtex
 @article{Feng:2023:WND,
     author = {Feng, Nicole and Gillespie, Mark and Crane, Keenan},
-    title = {Winding Numbers on Discrete Surfaces,
-    journal = {ACM Trans. Graph.},
+    title = {Winding Numbers on Discrete Surfaces},
+    year = {2023},
+    issue_date = {August 2023},
+    publisher = {Association for Computing Machinery},
+    address = {New York, NY, USA},
     volume = {42},
     number = {4},
-    month = aug,
-    year = {2023},
-    articleno = {},
-    doi = {},
-    publisher = {ACM},
-    address = {New York, NY, USA}
+    issn = {0730-0301},
+    url = {https://doi.org/10.1145/3592401},
+    doi = {10.1145/3592401},
+    journal = {ACM Trans. Graph.},
+    month = {jul},
+    articleno = {36}
 }
 ```
-TODO: Fill in article numbers.
 TODO: Document export functions.
 
 # Getting started
 
 The program relies on Gurobi to solve linear programs, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
+<!-- [How do I resolve "undefined reference" errors while linking Gurobi in C++?](https://support.gurobi.com/hc/en-us/articles/360039093112) -->
 
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
@@ -90,7 +93,9 @@ Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the p
 
 The GUI can perform intrinsic re-meshing, for example generating an intrinsic Delaunay triangulation for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export TODO
 
-Note: Only manifold meshes can be intrinsically re-triangulated.
+Notes: 
+* Only manifold meshes can be intrinsically re-triangulated.
+* Delaunay refinement may not terminate with a minimum angle value >30 degrees.
 
 # Visualization
 

@@ -60,36 +60,57 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 
 // ===================== MESH MUTATION
 
-// SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
+void resetIntrinsicTriangulationAndMarkEdges(std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation>& intTri,
+                                             ManifoldSurfaceMesh& manifoldMesh, VertexPositionGeometry& manifoldGeom,
+                                             const std::vector<Halfedge>& curveHalfedgesOnManifold);
 
-// std::vector<Halfedge> remeshIfNecessary(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geometry,
-//                                         const std::vector<Halfedge>& curveHalfedges,
-//                                         const std::vector<SurfacePoint>& curveNodes,
-//                                         const std::vector<std::array<size_t, 2>>& curveEdges);
-
-// std::vector<Halfedge> remeshToConforming(ManifoldSurfaceMesh& manifoldMesh, VertexPositionGeometry& manifoldGeom,
-//                                          const std::vector<SurfacePoint>& curveNodes,
-//                                          const std::vector<std::array<size_t, 2>>& curveEdges);
-
-// std::vector<Halfedge> splitEdgesIfNecessary(ManifoldSurfaceMesh& manifoldMesh, VertexPositionGeometry& manifoldGeom,
-//                                             const std::vector<Halfedge>& curveHalfedges,
-//                                             std::vector<size_t>& markedEdges, int maxEdgeSplits = 3);
-
-// void resetIntrinsicTriangulationAndMarkEdges(std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation>& intTri,
-//                                              ManifoldSurfaceMesh& manifoldMesh, VertexPositionGeometry& manifoldGeom,
-//                                              const std::vector<Halfedge>& curveHalfedgesOnManifold);
-
-// std::vector<Halfedge> determineHalfedgesInIntrinsicTriangulation(IntegerCoordinatesIntrinsicTriangulation& intTri,
-//                                                                  const std::vector<Halfedge>&
-//                                                                  curveHalfedgesOnManifold, std::vector<size_t>&
-//                                                                  markedEdges);
-
-// std::vector<Halfedge> determineHalfedgesInIntrinsicTriangulation(IntegerCoordinatesIntrinsicTriangulation& intTri,
-//                                                                  const std::vector<Halfedge>&
-//                                                                  curveHalfedgesOnManifold);
+std::vector<Halfedge> determineHalfedgesInIntrinsicTriangulation(IntegerCoordinatesIntrinsicTriangulation& intTri,
+                                                                 const std::vector<Halfedge>& curveHalfedgesOnManifold);
 
 // ===================== VISUALIZATION
 
 void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Halfedge>& curveHalfedges,
                    const std::vector<SurfacePoint>& curveNodes, const std::vector<std::array<size_t, 2>>& curveEdges,
                    const std::vector<std::array<Face, 2>>& dualChain);
+
+/*
+ * Linearly interpolate CornerData defined on the intrinsic triangulation to the common subdivision.
+ */
+template <typename T>
+CornerData<T> interpolateAcrossB(CommonSubdivision& cs, const CornerData<T>& dataB) {
+
+    CornerData<T> interp(*cs.mesh);
+    for (Vertex v : cs.mesh->vertices()) {
+        SurfacePoint posB = cs.sourcePoints[v]->posB;
+        if (posB.type == SurfacePointType::Vertex || posB.type == SurfacePointType::Edge) {
+            for (Corner c : v.adjacentCorners()) {
+                Face f = c.face();
+                Face fB = cs.sourceFaceB[f];
+                SurfacePoint pB_face = posB.inFace(fB);
+                T val = 0.;
+                size_t idx = 0;
+                for (Halfedge he : fB.adjacentHalfedges()) {
+                    Corner cB = he.corner();
+                    val += dataB[cB] * pB_face.faceCoords[idx];
+                    idx++;
+                }
+                interp[c] = val;
+            }
+        } else {
+            // this vertex in the common subdivison lies within a face in the intrinsic mesh
+            SurfacePoint pB_face = posB.inSomeFace();
+            Face fB = pB_face.face;
+            T val = 0.;
+            size_t idx = 0;
+            for (Halfedge he : fB.adjacentHalfedges()) {
+                Corner cB = he.corner();
+                val += dataB[cB] * pB_face.faceCoords[idx];
+                idx++;
+            }
+            for (Corner c : v.adjacentCorners()) {
+                interp[c] = val;
+            }
+        }
+    }
+    return interp;
+}

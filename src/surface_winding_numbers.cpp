@@ -348,13 +348,13 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
     for (size_t i = 0; i < F; i++) {
-        X.push_back(model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS)); // lb, ub, obj, vtype, vname=""
+        X[i] = model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS); // lb, ub, obj, vtype, vname=""
     }
     for (size_t i = 0; i < E; i++) {
         double cMag = abs(chain[i]);
         double coeff = (cMag < 1e-5) ? 1. : epsilon;
         // Add lower bound to enforce that the slack variables are positive.
-        X.push_back(model.addVar(0., GRB_INFINITY, coeff * geom.edgeLengths[i], GRB_CONTINUOUS));
+        X[F + i] = model.addVar(0., GRB_INFINITY, coeff * geom.edgeLengths[i], GRB_CONTINUOUS);
     }
     model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 
@@ -421,7 +421,6 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
 
     // Complete curve using a shortest-path heuristic.
     Vector<double> chain = dijkstraCompleteCurve(inputChain, endpoints);
-    // polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("Dijkstra-completed curve", completedChain);
 
     // Detect connected components.
     // In the same loop, integrate gamma within each connected component.
@@ -472,8 +471,8 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     }
     geom.unrequireEdgeIndices();
     int nComponents = regionLabel;
-    // polyscope::getSurfaceMesh("input mesh")->->addFaceScalarQuantity("connected components", visitedFace);
-    // polyscope::getSurfaceMesh("input mesh")->->addCornerScalarQuantity("v pre-shift", vInit);
+    polyscope::getSurfaceMesh("input mesh")->addFaceScalarQuantity("connected components", visitedFace);
+    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v pre-shift", vInit);
 
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
     std::vector<Edge> bEdges;
@@ -500,11 +499,11 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
     for (size_t i = 0; i < nComponents; i++) {
-        X.push_back(model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS));
+        X[i] = model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS);
     }
     for (size_t i = 0; i < reIdx; i++) {
         // Add lower bound to enforce that the slack variables are positive.
-        X.push_back(model.addVar(0., GRB_INFINITY, geom.edgeLengths[bEdges[i]], GRB_CONTINUOUS));
+        X[nComponents + i] = model.addVar(0., GRB_INFINITY, geom.edgeLengths[bEdges[i]], GRB_CONTINUOUS);
     }
     model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 

@@ -197,6 +197,24 @@ SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh) {
     throw std::logic_error("Bad switch");
 }
 
+SurfaceMesh* getMesh(const SurfacePoint& p) {
+    switch (p.type) {
+        case (SurfacePointType::Vertex): {
+            return p.vertex.getMesh();
+            break;
+        }
+        case (SurfacePointType::Edge): {
+            return p.edge.getMesh();
+            break;
+        }
+        case (SurfacePointType::Face): {
+            return p.face.getMesh();
+            break;
+        }
+    }
+    return nullptr;
+}
+
 /*
  * Convert curve represented using barycentric points to a collection of halfedges, if all curve edges are constrained
  * to mesh edges.
@@ -377,6 +395,63 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 
 // ===================== MESH MUTATION
 
+/*
+ * Build a new intrinsic triangulatiion, and set the given curve halfedges as marked edges.
+ */
+void resetIntrinsicTriangulationAndMarkEdges(std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation>& intTri,
+                                             ManifoldSurfaceMesh& manifoldMesh, VertexPositionGeometry& manifoldGeom,
+                                             const std::vector<Halfedge>& curveHalfedgesOnManifold) {
+
+    intTri = std::unique_ptr<IntegerCoordinatesIntrinsicTriangulation>(
+        new IntegerCoordinatesIntrinsicTriangulation(manifoldMesh, manifoldGeom));
+
+    // If curve is given as a set of mesh edges, set these edges as "marked" in the intrinsic triangulation so they
+    // never get flipped.
+    manifoldGeom.requireEdgeIndices();
+    EdgeData<bool> markedEdges(*intTri->intrinsicMesh, false);
+    // The intrinsic triangulation should at first just be a copy of the input mesh.
+    for (Halfedge he : curveHalfedgesOnManifold) {
+        size_t eIdx = manifoldGeom.edgeIndices[he.edge()];
+        markedEdges[intTri->intrinsicMesh->edge(eIdx)] = true;
+    }
+    manifoldGeom.unrequireEdgeIndices();
+    intTri->setMarkedEdges(markedEdges);
+}
+
+/*
+ * Given a curve represented as a series of halfedges in the original input mesh, return the set of corresponding
+ * halfedges in the (possibly refined) intrinsic triangulation.
+ */
+std::vector<Halfedge>
+determineHalfedgesInIntrinsicTriangulation(IntegerCoordinatesIntrinsicTriangulation& intTri,
+                                           const std::vector<Halfedge>& curveHalfedgesOnManifold) {
+
+    // For some reason, need to call this first or else everything fails. Intrinsic mesh isn't built/indexed right.
+    intTri.traceAllIntrinsicEdgesAlongInput();
+
+    // Use traceInputHalfedgeAlongIntrinsic(), and verify that all SurfacePoints are vertex-type.
+    std::vector<Halfedge> intCurve;
+    for (size_t heIdx = 0; heIdx < curveHalfedgesOnManifold.size(); heIdx++) {
+        Halfedge he = curveHalfedgesOnManifold[heIdx];
+        std::vector<SurfacePoint> pts = intTri.traceInputHalfedgeAlongIntrinsic(he);
+        for (SurfacePoint pt : pts) {
+            assert(pt.type == SurfacePointType::Vertex);
+        }
+        size_t n = pts.size();
+        for (size_t i = 0; i < n - 1; i++) {
+            Vertex vA = pts[i].vertex;
+            Vertex vB = pts[i + 1].vertex;
+            for (Halfedge outHe : vA.outgoingHalfedges()) {
+                if (outHe.tipVertex() == vB) {
+                    intCurve.push_back(outHe);
+                    break;
+                }
+            }
+        }
+    }
+    return intCurve;
+}
+
 
 // ===================== VISUALIZATION
 
@@ -384,7 +459,7 @@ void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Hal
                    const std::vector<SurfacePoint>& curveNodes, const std::vector<std::array<size_t, 2>>& curveEdges,
                    const std::vector<std::array<Face, 2>>& dualChain) {
 
-    if (curveEdges.size() > 0) {
+    if (curveEdges.size() > 0 && &geometry.mesh == getMesh(curveNodes[0])) {
         std::vector<Vector3> nodes;
         for (const SurfacePoint& p : curveNodes) nodes.push_back(p.interpolate(geometry.vertexPositions));
         polyscope::registerCurveNetwork("input curve", nodes, curveEdges)->setColor({0, 0, 0})->setEnabled(true);
