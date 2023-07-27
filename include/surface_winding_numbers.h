@@ -138,4 +138,6 @@ class SurfaceWindingNumbersSolver {
     Vector<double> convertToChain(const std::vector<Halfedge>& curve) const;
 
     Vector<double> convertToChain(const std::vector<Vertex>& curve) const;
+
+    Vector<double> jumpDerivative(const CornerData<double>& f) const;
 };

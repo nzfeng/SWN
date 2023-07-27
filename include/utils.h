@@ -43,6 +43,10 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
 // write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
 // loops)
 
+/* Input curves are already assumed to have been organized into connected components. */
+void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
+                       const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename);
+
 // ===================== CURVE MANIPULATION
 
 Halfedge determineHalfedgeFromVertices(const Vertex& vA, const Vertex& vB);
@@ -56,6 +60,10 @@ Vector<int> convertToChain(IntrinsicGeometryInterface& geom, const std::vector<H
 
 std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface& geom,
                                                       const std::vector<Halfedge>& curveHalfedges);
+
+std::vector<std::vector<std::array<size_t, 2>>>
+getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNodes,
+                   const std::vector<std::array<size_t, 2>>& curveEdges);
 
 
 // ===================== MESH MUTATION

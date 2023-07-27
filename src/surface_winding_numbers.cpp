@@ -98,7 +98,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
         w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
         // TODO: Do rounding procedure
     }
-    // TODO: Store intermediate computed quantities as member variables.
+    // TODO: Store intermediate computed quantities (u, v, g) as member variables.
     return w;
 }
 
@@ -837,6 +837,28 @@ Vector<double> SurfaceWindingNumbersSolver::convertToChain(const std::vector<Ver
     }
     geom.unrequireEdgeIndices();
     return chain;
+}
+
+/*
+ * Return the 1-chain Jf. The input function f is assumed to be jump harmonic.
+ */
+Vector<double> SurfaceWindingNumbersSolver::jumpDerivative(const CornerData<double>& f) const {
+
+    Vector<double> Jf = Vector<double>::Zero(mesh.nEdges());
+    geom.requireEdgeIndices();
+    for (Edge e : mesh.edges()) {
+        if (!e.isManifold() || e.isBoundary()) continue;
+        Halfedge he = e.halfedge();
+        Corner c0 = he.corner();
+        Corner c1 = he.next().corner();
+        Corner d0 = he.twin().next().corner();
+        Corner d1 = he.twin().next().next().next().corner();
+        // average jumps across both corner pairs, even though they should be the same
+        size_t eIdx = geom.edgeIndices[e];
+        Jf[eIdx] = 0.5 * ((f[c0] - f[d0]) + (f[c1] - f[d1]));
+    }
+    geom.unrequireEdgeIndices();
+    return Jf;
 }
 
 

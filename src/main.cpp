@@ -429,6 +429,43 @@ void functionCallback() {
 
         ImGui::TreePop();
     }
+
+    if (ImGui::TreeNode("Export")) {
+        if (ImGui::TreeNode("Functions")) {
+            if (ImGui::Button("Export winding number function")) {
+                // TODO
+            }
+            if (ImGui::Button("Export initial jump harmonic function u")) {
+                // TODO
+            }
+            if (ImGui::Button("Export residual function v")) {
+                // TODO
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Curves")) {
+            if (ImGui::Button("Export input curves")) {
+                // TODO
+            }
+            if (ImGui::Button("Export completed bounding loops")) {
+                // TODO
+            }
+            if (ImGui::Button("Export completed nonbounding loops")) {
+                // TODO
+            }
+            if (ImGui::Button("Export all completed curves")) {
+                // TODO
+            }
+            if (ImGui::Button("Export bounding portions")) {
+                // TODO
+            }
+            if (ImGui::Button("Export nonbounding portions")) {
+                // TODO
+            }
+            ImGui::TreePop();
+        }
+        ImGui::TreePop();
+    }
 }
 
 int main(int argc, char** argv) {

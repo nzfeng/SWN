@@ -165,7 +165,37 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
 
 // TODO: texture exporting
 
-// TODO: nice curve exporting
+void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
+                       const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename) {
+
+    std::fstream f;
+    f.open(filename, std::ios::out | std::ios::trunc);
+
+    Vector3 pos;
+    size_t a, b;
+    if (f.is_open()) {
+        for (const SurfacePoint& pt : curveNodes) {
+            pos = pt.interpolate(vertexPositions);
+            f << "v " << pos[0] << " " << pos[1] << " " << pos[2] << "\n";
+        }
+        for (auto curve : curveEdges) {
+            // Assume that each curve is connected
+            f << "l ";
+            for (auto seg : curve) {
+                a = seg[0];
+                b = seg[1];
+                f << seg[0] + 1 << " "; // OBJ is 1-indexed
+            }
+            f << b + 1; // OBJ is 1-indexed
+            f << "\n";
+        }
+
+        f.close();
+        std::cerr << "File " << filename << " written succesfully." << std::endl;
+    } else {
+        std::cerr << "Could not save curves '" << filename << "'!" << std::endl;
+    }
+}
 
 
 // ===================== CURVE MANIPULATION
@@ -322,6 +352,7 @@ Vector<int> convertToChain(IntrinsicGeometryInterface& geom, const std::vector<H
 
 /*
  * Given a collection of halfedges, determine all the connected curve components it represents.
+ *
  * This function is useful for extracting smooth curves when we go to export curves as OBJ and render them. If the
  * curve is exported as a collection of (disconnected) edges, then the resulting curve when thickened and rendered
  * in Blender will have unsightly gaps.
@@ -392,6 +423,63 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
     }
     geom.unrequireEdgeIndices();
 
+    return curves;
+}
+
+/*
+ * Same as getCurveComponents(), but for when the curve is not constrained to mesh edges and is given as a series of
+ * SurfacePoints.
+ */
+std::vector<std::vector<std::array<size_t, 2>>>
+getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNodes,
+                   const std::vector<std::array<size_t, 2>>& curveEdges) {
+
+    std::vector<std::array<size_t, 2>> edgesToAdd = curveEdges;
+    std::vector<std::vector<std::array<size_t, 2>>> curves;
+    size_t nSegs = curveEdges.size();
+    while (edgesToAdd.size() > 0) {
+        std::array<size_t, 2> startSeg = edgesToAdd.back();
+        edgesToAdd.pop_back();
+        curves.emplace_back();
+        std::vector<std::array<size_t, 2>>& currCurve = curves.back();
+        currCurve.push_back(startSeg);
+
+        // Add segs to the front end until we can't.
+        std::array<size_t, 2> currSeg = startSeg;
+        while (true) {
+            const SurfacePoint& front = curveNodes[currSeg[1]];
+            bool didWeFindOne = false;
+            for (size_t i = 0; i < edgesToAdd.size(); i++) {
+                std::array<size_t, 2> otherSeg = edgesToAdd[i];
+                if (curveNodes[otherSeg[0]] == front) {
+                    currSeg = otherSeg;
+                    currCurve.push_back(otherSeg);
+                    edgesToAdd.erase(edgesToAdd.begin() + i);
+                    didWeFindOne = true;
+                    break;
+                }
+            }
+            if (!didWeFindOne) break;
+        }
+
+        // Add segs to the back end until we can't.
+        currSeg = startSeg;
+        while (true) {
+            const SurfacePoint& back = curveNodes[currSeg[0]];
+            bool didWeFindOne = false;
+            for (size_t i = 0; i < edgesToAdd.size(); i++) {
+                std::array<size_t, 2> otherSeg = edgesToAdd[i];
+                if (curveNodes[otherSeg[1]] == back) {
+                    currSeg = otherSeg;
+                    currCurve.insert(currCurve.begin(), otherSeg);
+                    edgesToAdd.erase(edgesToAdd.begin() + i);
+                    didWeFindOne = true;
+                    break;
+                }
+            }
+            if (!didWeFindOne) break;
+        }
+    }
     return curves;
 }
 
