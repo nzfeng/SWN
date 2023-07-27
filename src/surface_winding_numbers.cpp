@@ -13,6 +13,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
     VertexData<bool> isInteriorVertex(mesh, false); // debugging
+    EdgeData<bool> outgoingHalfedges(mesh, false);  // debugging
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
@@ -25,7 +26,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     //  - store an arbitrary outgoing cut halfedge per interior vertex
     //  - curve endpoints and their signs.
     std::map<Vertex, Halfedge> outgoingHalfedgeOnCurve;
-    // TODO: If boundary vertex, outgoingHalfedge should be on the most CW corner
     // TODO: Did I handle chain edges on the boundary yet?
     std::vector<std::pair<Vertex, bool>> endpoints;
     geom.requireVertexIndices();
@@ -39,13 +39,32 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
             size_t mag = abs(boundary[vIdx]);
             for (size_t i = 0; i < mag; i++) endpoints.emplace_back(v, sgn);
         } else if (v.isManifold()) {
+            Halfedge outgoingHe = Halfedge();
             for (Halfedge he : v.outgoingHalfedges()) {
                 if (abs(chain[geom.edgeIndices[he.edge()]]) > eps) {
                     interiorVertices.push_back(v);
-                    outgoingHalfedgeOnCurve.insert(std::make_pair(v, he));
+                    outgoingHe = he;
                     isInteriorVertex[v] = true;
                     break;
                 }
+            }
+            // If vertex is on the boundary, we must store the most CW outgoing halfedge (rather than an arbitrary
+            // outgoing halfedge on the curve.)
+            if (v.isBoundary() && isInteriorVertex[v]) {
+                Halfedge start = v.halfedge();
+                Halfedge curr = start;
+                do {
+                    Halfedge next = start.twin().next(); // go CW
+                    if (curr.isInterior() && !next.isInterior()) {
+                        outgoingHe = curr;
+                        break;
+                    }
+                    curr = next;
+                } while (curr != start);
+            }
+            if (isInteriorVertex[v]) {
+                outgoingHalfedgeOnCurve.insert(std::make_pair(v, outgoingHe));
+                outgoingHalfedges[outgoingHe.edge()] = true; // debugging
             }
         }
     }
@@ -53,8 +72,10 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     geom.unrequireEdgeIndices();
 
     CornerData<double> c = computeReducedCoordinates(chain, interiorVertices, outgoingHalfedgeOnCurve);
+    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c);                               // debugging
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex); // debugging
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
+    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("outgoingHalfedges", outgoingHalfedges);
     CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
     polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("u", w); // debugging
     std::cerr << "u min: " << w.toVector().minCoeff() << "\tu max: " << w.toVector().maxCoeff()
@@ -150,7 +171,7 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
                 reducedCoordinates[curr.corner()] = cumJump;
             }
             curr = curr.next().next().twin(); // go counterclockwise
-        } while (curr != start);
+        } while (curr != start && curr.isInterior());
     }
     geom.unrequireEdgeIndices();
     return reducedCoordinates;
@@ -183,7 +204,8 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
-    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
+    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl;          // debugging
+    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("b", b); // debugging
 
     // Apply shifts to recover u.
     CornerData<double> u(mesh);
