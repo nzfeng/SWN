@@ -61,6 +61,7 @@ You can pass several solve options to the command line, options which are also s
 |`--correctNonbounding`=true| Correct for nonbounding curve components |
 |`--approximateResidual`=false| Use reduced-size linear program to approximate residual function, instead of solving a more expensive LP. |
 <!--|`--viz`| Show the GUI |-->
+|`--verbose`, `-V`| Verbose output |
 |`--version`, `-v`| Version info |
 |`--help`, `-h`| Display help |
 

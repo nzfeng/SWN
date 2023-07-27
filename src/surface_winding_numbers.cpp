@@ -442,10 +442,12 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
                                                          const Vector<double>& gamma) const {
 
     // Complete curve using a shortest-path heuristic.
+    std::cerr << "Completing curve..." << std::endl;
     Vector<double> chain = dijkstraCompleteCurve(inputChain, endpoints);
 
     // Detect connected components.
     // In the same loop, integrate gamma within each connected component.
+    std::cerr << "Determining connected components..." << std::endl;
     double eps = 1e-5;
     int regionLabel = 0;
     FaceData<int> visitedFace(mesh, 0);
@@ -473,6 +475,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
             bag.pop_back();
             visitedFace[currFace] = regionLabel;
             for (Halfedge he : currFace.adjacentHalfedges()) {
+                if (he.edge().isBoundary()) continue;
                 Face neighbor = he.twin().face();
                 if (abs(chain[geom.edgeIndices[he.edge()]]) < eps && visitedFace[neighbor] == 0) {
                     bag.push_back(neighbor);
@@ -496,6 +499,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     polyscope::getSurfaceMesh("input mesh")->addFaceScalarQuantity("connected components", visitedFace);
     polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v pre-shift", vInit);
 
+    std::cerr << "Re-indexing edges..." << std::endl;
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
     std::vector<Edge> bEdges;
     size_t reIdx = 0;
