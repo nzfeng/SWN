@@ -337,116 +337,78 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     size_t F = mesh.nFaces();
     size_t E = mesh.nEdges();
     size_t numVars = F + E; // DOFs + slack variables
-    std::cerr << "Get an instance of a LinearProblem..." << std::endl;
-    COMISO::LinearProblem lp(numVars);
 
-    // Set up objective.
-    std::cerr << "Setting up objective..." << std::endl;
+    // Set up environment
+    std::cerr << "Setting up Gurobi environment..." << std::endl;
+    GRBEnv env = GRBEnv();
+    GRBModel model = GRBModel(env);
+
+    // Allocate variables
+    std::cerr << "Allocating variables and setting up objective..." << std::endl;
+    std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
+    for (size_t i = 0; i < F; i++) {
+        X.push_back(model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS)); // lb, ub, obj, vtype, vname=""
+    }
     for (size_t i = 0; i < E; i++) {
-        double coeff = (abs(chain[i]) < 1e-5) ? 1. : epsilon;
-        lp.coeffs()[F + i] = coeff * geom.edgeLengths[i];
+        double cMag = abs(chain[i]);
+        double coeff = (cMag < 1e-5) ? 1. : epsilon;
+        // Add lower bound to enforce that the slack variables are positive.
+        X.push_back(model.addVar(0., GRB_INFINITY, coeff * geom.edgeLengths[i], GRB_CONTINUOUS));
     }
-    geom.unrequireEdgeLengths();
+    model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 
-    std::cerr << "Setting up variables..." << std::endl;
-    std::vector<COMISO::PairIndexVtype> X(numVars);
-    std::vector<COMISO::NConstraintInterface*> constraints;
-    // Set up solution vector
-    for (size_t j = 0; j < numVars; j++) {
-        X[j] = COMISO::PairIndexVtype(j, COMISO::Real);
-    }
+    // Set up constraints
     std::cerr << "Setting up constraints..." << std::endl;
-    // Add constraint to enforce that the slack variables are positive.
-    for (size_t i = 0; i < E; i++) {
-        COMISO::LinearConstraint::SVectorNC coeffs(numVars);
-        coeffs.coeffRef(F + i) = 1.;
-        COMISO::LinearConstraint* lc =
-            new COMISO::LinearConstraint(coeffs, 0., COMISO::LinearConstraint::NC_GREATER_EQUAL);
-        constraints.push_back(lc);
-
-        // Add constraints on slack variables so that for each edge that was originally in the curve, the jump in v is
-        // at most jump in u.
-        if (abs(chain[i]) > 1e-5) {
-            COMISO::LinearConstraint::SVectorNC coeffsB(numVars);
-            coeffsB.coeffRef(F + i) = 1.;
-            COMISO::LinearConstraint* lcB =
-                new COMISO::LinearConstraint(coeffsB, -abs(chain[i]), COMISO::LinearConstraint::NC_LESS_EQUAL);
-            constraints.push_back(lcB);
-        }
-    }
-    // Add constraints to define the slack variables.
     geom.requireFaceIndices();
     for (size_t i = 0; i < E; i++) {
         // Compute the difference in face values across edge i
         Edge ei = mesh.edge(i);
         if (ei.isBoundary()) continue;
         Halfedge he = ei.halfedge();
-        // Warning: the below 2 lines assume a manifold mesh
+        // Note: the below two lines assume a manifold mesh.
         size_t fA = geom.faceIndices[he.face()];
         size_t fB = geom.faceIndices[he.twin().face()];
         double diff = vInit[he.corner()] - vInit[he.twin().next().corner()];
 
-        // -z -Cijmu <= 0
-        COMISO::LinearConstraint::SVectorNC coeffsA(numVars);
-        coeffsA.coeffRef(fA) = -1.;
-        coeffsA.coeffRef(fB) = 1.;
-        coeffsA.coeffRef(F + i) = -1.;
-        COMISO::LinearConstraint* lcA =
-            new COMISO::LinearConstraint(coeffsA, -diff, COMISO::LinearConstraint::NC_LESS_EQUAL);
-        constraints.push_back(lcA);
+        // Constraints to define the slack variables.
+        model.addConstr(-X[F + i] <= diff + X[fA] - X[fB]); // -z - Cij*mu <= 0
+        model.addConstr(X[F + i] >= diff + X[fA] - X[fB]);  // z - Cij*mu >= 0
 
-        // z - Cijmu >= 0
-        COMISO::LinearConstraint::SVectorNC coeffsB(numVars);
-        coeffsB.coeffRef(fA) = -1.;
-        coeffsB.coeffRef(fB) = 1.;
-        coeffsB.coeffRef(F + i) = 1.;
-        COMISO::LinearConstraint* lcB =
-            new COMISO::LinearConstraint(coeffsB, -diff, COMISO::LinearConstraint::NC_GREATER_EQUAL);
-        constraints.push_back(lcB);
-
-        // Gij Cijmu >= 0
-        double gij = chain(i);
-        COMISO::LinearConstraint::SVectorNC coeffsC(numVars);
-        coeffsC.coeffRef(fA) = 1. * gij;
-        coeffsC.coeffRef(fB) = -1. * gij;
-        COMISO::LinearConstraint* lcC =
-            new COMISO::LinearConstraint(coeffsC, diff * gij, COMISO::LinearConstraint::NC_GREATER_EQUAL);
-        constraints.push_back(lcC);
-
-        // Gij Cijmu <= Gij * Gij
-        COMISO::LinearConstraint::SVectorNC coeffsD(numVars);
-        coeffsD.coeffRef(fA) = 1. * gij;
-        coeffsD.coeffRef(fB) = -1. * gij;
-        COMISO::LinearConstraint* lcD =
-            new COMISO::LinearConstraint(coeffsD, diff * gij - gij * gij, COMISO::LinearConstraint::NC_LESS_EQUAL);
-        constraints.push_back(lcD);
+        // Add constraint so that for each edge that was originally in the curve, the jump in v is at most jump in u
+        // ("no extra loops" constraint).
+        double gij = chain[i];
+        model.addConstr(0 <= gij * (diff + X[fA] - X[fB]));         // Gij Cij*mu >= 0
+        model.addConstr(gij * (diff + X[fA] - X[fB]) <= gij * gij); // Gij Cij*mu <= Gij * Gij
     }
     geom.unrequireFaceIndices();
 
-#if (COMISO_GUROBI_AVAILABLE)
-    std::cout << "Getting GUROBI solver... " << std::endl;
-    COMISO::GUROBISolver gsol;
-
-    std::cout << "Solve..." << std::endl;
-    double time_limit = 1e10; // time limit in seconds
-    gsol.solve(&lp, constraints, X, time_limit);
-    std::cerr << "Solved" << std::endl;
-#endif
+    std::cerr << "Solving..." << std::endl;
+    try {
+        model.optimize();
+        int optimstatus = model.get(GRB_IntAttr_Status);
+        if (optimstatus == GRB_OPTIMAL) {
+            std::cout << "Optimal objective: " << model.get(GRB_DoubleAttr_ObjVal) << std::endl;
+        } else if (optimstatus == GRB_INFEASIBLE) {
+            std::cout << "Model is infeasible" << std::endl;
+        } else if (optimstatus == GRB_UNBOUNDED) {
+            std::cout << "Model is unbounded" << std::endl;
+        } else {
+            std::cout << "Optimization was stopped with status = " << optimstatus << std::endl;
+        }
+    } catch (GRBException e) {
+        std::cout << "Error code = " << e.getErrorCode() << std::endl;
+        std::cout << e.getMessage() << std::endl;
+    } catch (...) {
+        std::cout << "Error during optimization" << std::endl;
+    }
 
     // Reconstruct solution using shifts solved for from LP.
     CornerData<double> vPost = vInit; // v post-shift
     for (size_t i = 0; i < F; i++) {
         Face f = mesh.face(i);
-        double shift = lp.x()[i];
+        double shift = X[i].get(GRB_DoubleAttr_X);
         for (Corner c : f.adjacentCorners()) vPost[c] += shift;
-    }
-    std::cerr << "Linear program solved" << std::endl;
-    std::cerr << "Objective is " << lp.eval_f(lp.x().data()) << std::endl;
-
-    // Delete pointers
-    for (size_t i = 0; i < constraints.size(); i++) {
-        delete constraints[i];
     }
 
     return vPost;
@@ -466,7 +428,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     double eps = 1e-5;
     int regionLabel = 0;
     FaceData<int> visitedFace(mesh, 0);
-    CornerData<double> vPreShift(mesh, 0);
+    CornerData<double> vInit(mesh, 0);
     geom.requireEdgeIndices();
     for (Face seedFace : mesh.faces()) {
 
@@ -476,10 +438,10 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
         Halfedge he0 = seedFace.halfedge();
         Halfedge he1 = he0.next();
         Halfedge he2 = he1.next();
-        vPreShift[he1.corner()] =
+        vInit[he1.corner()] =
             he0.orientation() ? gamma[geom.edgeIndices[he0.edge()]] : -gamma[geom.edgeIndices[he0.edge()]];
-        vPreShift[he2.corner()] = vPreShift[he1.corner()];
-        vPreShift[he2.corner()] +=
+        vInit[he2.corner()] = vInit[he1.corner()];
+        vInit[he2.corner()] +=
             he1.orientation() ? gamma[geom.edgeIndices[he1.edge()]] : -gamma[geom.edgeIndices[he1.edge()]];
 
         // BFS
@@ -497,13 +459,13 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
                     he0 = he.twin().next();
                     he1 = he0.next();
                     he2 = he1.next();
-                    vPreShift[he0.corner()] = vPreShift[he.corner()];
-                    vPreShift[he1.corner()] = vPreShift[he0.corner()];
-                    vPreShift[he1.corner()] += (he0.orientation() ? gamma[geom.edgeIndices[he0.edge()]]
-                                                                  : -gamma[geom.edgeIndices[he0.edge()]]);
-                    vPreShift[he2.corner()] = vPreShift[he1.corner()];
-                    vPreShift[he2.corner()] += (he1.orientation() ? gamma[geom.edgeIndices[he1.edge()]]
-                                                                  : -gamma[geom.edgeIndices[he1.edge()]]);
+                    vInit[he0.corner()] = vInit[he.corner()];
+                    vInit[he1.corner()] = vInit[he0.corner()];
+                    vInit[he1.corner()] += (he0.orientation() ? gamma[geom.edgeIndices[he0.edge()]]
+                                                              : -gamma[geom.edgeIndices[he0.edge()]]);
+                    vInit[he2.corner()] = vInit[he1.corner()];
+                    vInit[he2.corner()] += (he1.orientation() ? gamma[geom.edgeIndices[he1.edge()]]
+                                                              : -gamma[geom.edgeIndices[he1.edge()]]);
                 }
             }
         }
@@ -511,7 +473,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     geom.unrequireEdgeIndices();
     int nComponents = regionLabel;
     // polyscope::getSurfaceMesh("input mesh")->->addFaceScalarQuantity("connected components", visitedFace);
-    // polyscope::getSurfaceMesh("input mesh")->->addCornerScalarQuantity("v pre-shift", vPreShift);
+    // polyscope::getSurfaceMesh("input mesh")->->addCornerScalarQuantity("v pre-shift", vInit);
 
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
     std::vector<Edge> bEdges;
@@ -526,53 +488,32 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
         }
     }
 
+
     // Run reduced-size LP, where [# of DOFs] = [# of connected components].
     size_t numVars = nComponents + reIdx; // DOFs + slack variables
-    std::cerr << "Get an instance of a LinearProblem for reducedLinearProgram()..." << std::endl;
-    COMISO::LinearProblem lp(numVars);
+    std::cerr << "Setting up Gurobi environment..." << std::endl;
+    GRBEnv env = GRBEnv();
+    GRBModel model = GRBModel(env);
 
-    std::cerr << "Setting up objective..." << std::endl;
+    // Allocate variables
+    std::cerr << "Allocating variables and setting up objective..." << std::endl;
+    std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
+    for (size_t i = 0; i < nComponents; i++) {
+        X.push_back(model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS));
+    }
     for (size_t i = 0; i < reIdx; i++) {
-        // |total shift| = |existing diff. across bEdge i + component shift}
-        lp.coeffs()[nComponents + i] = geom.edgeLengths[bEdges[i]];
+        // Add lower bound to enforce that the slack variables are positive.
+        X.push_back(model.addVar(0., GRB_INFINITY, geom.edgeLengths[bEdges[i]], GRB_CONTINUOUS));
     }
-    geom.unrequireEdgeLengths();
+    model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 
-    std::cerr << "Setting up variables..." << std::endl;
-    std::vector<COMISO::PairIndexVtype> X(numVars);
-    for (size_t j = 0; j < numVars; j++) {
-        X[j] = COMISO::PairIndexVtype(j, COMISO::Real);
-    }
-
+    // Set up constraints
     std::cerr << "Setting up constraints..." << std::endl;
-    std::vector<COMISO::NConstraintInterface*> constraints;
-
-    // Add constraint to enforce that the slack variables are positive.
-    for (size_t i = 0; i < reIdx; i++) {
-        COMISO::LinearConstraint::SVectorNC coeffs(numVars);
-        coeffs.coeffRef(nComponents + i) = 1.;
-        COMISO::LinearConstraint* lc =
-            new COMISO::LinearConstraint(coeffs, 0., COMISO::LinearConstraint::NC_GREATER_EQUAL);
-        constraints.push_back(lc);
-    }
-
-    // Add constraints on slack variables so that for each edge that was originally in the curve, the jump in v is at
-    // most jump in u.
-    for (size_t i = 0; i < reIdx; i++) {
-        double chainCoeff = inputChain[geom.edgeIndices[bEdges[i]]];
-        if (abs(chainCoeff) > eps) {
-            COMISO::LinearConstraint::SVectorNC coeffs(numVars);
-            coeffs.coeffRef(nComponents + i) = 1.;
-            COMISO::LinearConstraint* lc =
-                new COMISO::LinearConstraint(coeffs, -abs(chainCoeff), COMISO::LinearConstraint::NC_LESS_EQUAL);
-            constraints.push_back(lc);
-        }
-    }
-
-    // Add constraints to define the slack variables
+    geom.requireFaceIndices();
     for (size_t i = 0; i < reIdx; i++) {
         Edge e = bEdges[i];
+        if (e.isBoundary()) continue;
         Halfedge he = e.halfedge();
         Corner c0 = he.corner();
         Corner c1 = he.next().corner();
@@ -580,53 +521,45 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
         Corner d1 = he.twin().next().next().next().corner();
         int r0 = visitedFace[he.face()] - 1;
         int r1 = visitedFace[he.twin().face()] - 1;
-        double initShift = 0.5 * ((vPreShift[c0] - vPreShift[d0]) + (vPreShift[c1] - vPreShift[d1]));
+        double diff = 0.5 * ((vInit[c0] - vInit[d0]) + (vInit[c1] - vInit[d1])); // average diff
 
-        COMISO::LinearConstraint::SVectorNC coeffsA(numVars);
-        coeffsA.coeffRef(r0) = -1.;
-        coeffsA.coeffRef(r1) = 1.;
-        coeffsA.coeffRef(nComponents + i) = -1.;
-        COMISO::LinearConstraint* lcA =
-            new COMISO::LinearConstraint(coeffsA, -initShift, COMISO::LinearConstraint::NC_LESS_EQUAL);
-        constraints.push_back(lcA);
-
-        COMISO::LinearConstraint::SVectorNC coeffsB(numVars);
-        coeffsB.coeffRef(r0) = -1.;
-        coeffsB.coeffRef(r1) = 1.;
-        coeffsB.coeffRef(nComponents + i) = 1.;
-        COMISO::LinearConstraint* lcB =
-            new COMISO::LinearConstraint(coeffsB, -initShift, COMISO::LinearConstraint::NC_GREATER_EQUAL);
-        constraints.push_back(lcB);
+        // Constraints to define the slack variables.
+        model.addConstr(-X[nComponents + i] <= diff + X[r0] - X[r1]);
+        model.addConstr(X[nComponents + i] >= diff + X[r0] - X[r1]);
     }
+    geom.unrequireFaceIndices();
 
-#if (COMISO_GUROBI_AVAILABLE)
-    std::cout << "Getting GUROBI solver... " << std::endl;
-    COMISO::GUROBISolver gsol;
-
-    std::cout << "Solve..." << std::endl;
-    double time_limit = 1e10; // time limit in seconds
-    gsol.solve(&lp, constraints, X, time_limit);
-    std::cerr << "Solved" << std::endl;
-#endif
+    std::cerr << "Solving..." << std::endl;
+    try {
+        model.optimize();
+        int optimstatus = model.get(GRB_IntAttr_Status);
+        if (optimstatus == GRB_OPTIMAL) {
+            std::cout << "Optimal objective: " << model.get(GRB_DoubleAttr_ObjVal) << std::endl;
+        } else if (optimstatus == GRB_INFEASIBLE) {
+            std::cout << "Model is infeasible" << std::endl;
+        } else if (optimstatus == GRB_UNBOUNDED) {
+            std::cout << "Model is unbounded" << std::endl;
+        } else {
+            std::cout << "Optimization was stopped with status = " << optimstatus << std::endl;
+        }
+    } catch (GRBException e) {
+        std::cout << "Error code = " << e.getErrorCode() << std::endl;
+        std::cout << e.getMessage() << std::endl;
+    } catch (...) {
+        std::cout << "Error during optimization" << std::endl;
+    }
 
     // Reconstruct solution using shifts solved for from LP.
-    CornerData<double> vPostShift = vPreShift;
+    CornerData<double> vPost = vInit; // v post-shift
     for (size_t i = 0; i < nComponents; i++) {
-        double shift = lp.x()[i];
+        double shift = X[i].get(GRB_DoubleAttr_X);
         for (Face f : mesh.faces()) {
             if (visitedFace[f] != i + 1) continue;
-            for (Corner c : f.adjacentCorners()) vPostShift[c] += shift;
+            for (Corner c : f.adjacentCorners()) vPost[c] += shift;
         }
     }
-    std::cerr << "reducedLinearProgram() solved" << std::endl;
-    std::cerr << "Objective is " << lp.eval_f(lp.x().data()) << std::endl;
 
-    // Delete pointers
-    for (size_t i = 0; i < constraints.size(); i++) {
-        delete constraints[i];
-    }
-
-    return vPostShift;
+    return vPost;
 }
 
 Vector<double>

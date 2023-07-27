@@ -9,23 +9,12 @@
 #include "geometrycentral/surface/trace_geodesic.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
 
+#include "gurobi_c++.h"
 #include "utils.h"
 
 #include <complex>
+#include <queue>
 #include <set>
-
-#include <CoMISo/Config/config.hh>
-#include <CoMISo/NSolver/CBCSolver.hh>
-#include <CoMISo/NSolver/COMISOSolver.hh>
-#include <CoMISo/NSolver/CPLEXSolver.hh>
-#include <CoMISo/NSolver/GUROBISolver.hh>
-// #include <CoMISo/NSolver/LPSolveSolver.hh>
-#include <CoMISo/NSolver/LinearConstraint.hh>
-#include <CoMISo/NSolver/LinearProblem.hh>
-#include <CoMISo/NSolver/NPDerivativeChecker.hh>
-#include <CoMISo/NSolver/NProblemInterface.hh>
-#include <CoMISo/NSolver/VariableType.hh>
-#include <CoMISo/Utils/StopWatch.hh>
 
 // for debugging
 #include "polyscope/polyscope.h"

@@ -4,6 +4,3 @@
 [submodule "deps/polyscope"]
 	path = deps/polyscope
 	url = https://github.com/nzfeng/polyscope.git
-[submodule "deps/CoMISo"]
-	path = deps/CoMISo
-	url = https://github.com/libigl/CoMISo.git

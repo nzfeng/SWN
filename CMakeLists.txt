@@ -6,6 +6,7 @@ project(SWN)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)  
 
 # Print the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -69,10 +70,17 @@ else()
 endif()
 
 # == Deps
-add_subdirectory(../common-deps/deps/CoMISo deps/CoMISo)
-#add_subdirectory(deps/CoMISo)
 add_subdirectory(deps/geometry-central)
 add_subdirectory(deps/polyscope)
+
+find_package(GUROBI REQUIRED)
+message("${GUROBI_INCLUDE_DIRS}")
+if (GUROBI_FOUND)
+  message(STATUS "Gurobi found at ${GUROBI_LIBRARY}")
+else ()
+  message(STATUS "Gurobi not found!")
+endif ()
+include_directories(${GUROBI_INCLUDE_DIRS})
 
 # == Build our project stuff
 
@@ -91,4 +99,4 @@ target_compile_features(main PUBLIC cxx_std_11)
 
 # add the args.hxx project which we use for command line args
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")
-target_link_libraries(main geometry-central polyscope CoMISo::CoMISo)
+target_link_libraries(main geometry-central polyscope ${GUROBI_CXX_LIBRARY} ${GUROBI_LIBRARY})
