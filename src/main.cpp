@@ -69,6 +69,10 @@ VertexPositionGeometry& getGeom() {
     return USING_MANIFOLD_MESH ? *manifoldGeom : *geometry;
 }
 
+std::vector<Halfedge>& getCurveHalfedges() {
+    return USING_MANIFOLD_MESH ? curveHalfedgesOnManifold : curveHalfedges;
+}
+
 void setManifoldMesh() {
 
     USING_MANIFOLD_MESH = true;
@@ -91,6 +95,18 @@ void ensureHaveManifoldMesh() {
     if (manifoldGeom == nullptr) {
         manifoldGeom = geometry->reinterpretTo(*manifoldMesh);
         manifoldGeom->refreshQuantities();
+    }
+}
+
+void reinterpretCurveToManifoldMesh() {
+
+    ensureHaveManifoldMesh();
+    if (curveHalfedgesOnManifold.size() == 0) {
+        std::vector<SurfacePoint> curveNodesOnManifold;
+        for (const auto& pt : CURVE_NODES) {
+            curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
+        }
+        curveHalfedgesOnManifold = convertToHalfedges(curveNodesOnManifold, CURVE_EDGES);
     }
 }
 
@@ -217,7 +233,7 @@ bool splitEdgesIfNecessary(const std::vector<Halfedge>& halfedges) {
         }
     }
 
-    std::vector<Halfedge> curveHalfedgesOnManifold;
+    curveHalfedgesOnManifold.clear();
     for (Edge e : manifoldMesh->edges()) {
         int val = chain[e];
         Halfedge he = e.halfedge();
@@ -257,13 +273,7 @@ void ensureHaveIntrinsicTriangulation() {
         EdgeData<bool> markedEdges(*intTri->intrinsicMesh, false);
 
         // The intrinsic triangulation should at first just be a copy of the input mesh.
-        if (curveHalfedgesOnManifold.size() == 0) {
-            std::vector<SurfacePoint> curveNodesOnManifold;
-            for (const auto& pt : CURVE_NODES) {
-                curveNodesOnManifold.push_back(reinterpretTo(pt, *manifoldMesh));
-            }
-            curveHalfedgesOnManifold = convertToHalfedges(curveNodesOnManifold, CURVE_EDGES);
-        }
+        reinterpretCurveToManifoldMesh();
 
         setManifoldMesh();
         getGeom().requireEdgeIndices();
@@ -307,7 +317,7 @@ void visualizeIntrinsicEdges() {
     }
 
     intEdgeQ = polyscope::registerCurveNetwork("intrinsic edges", nodes, edges);
-    intEdgeQ->setEnabled(true);
+    intEdgeQ->setEnabled(VIS_INTRINSIC_MESH);
     intEdgeQ->setColor(polyscope::render::RGB_ORANGE);
     intEdgeQ->setRadius(0.0005);
 }
@@ -501,13 +511,14 @@ int main(int argc, char** argv) {
         curveHalfedges = convertToHalfedges(CURVE_NODES, CURVE_EDGES);
         if (ALLOW_REMESHING && mesh->isManifold() && curveHalfedges.size() == 0) {
             if (remeshIfNecessary()) std::cerr << "Mesh re-meshed so curve is conforming." << std::endl;
-            if (splitEdgesIfNecessary(curveHalfedgesOnManifold)) {
-                std::cerr << "Mesh re-meshed so curve contains no single-edge components." << std::endl;
-            }
         }
     }
 
     if (mesh->isManifold()) {
+        reinterpretCurveToManifoldMesh();
+        if (ALLOW_REMESHING && curveHalfedgesOnManifold.size() > 0 && splitEdgesIfNecessary(curveHalfedgesOnManifold)) {
+            std::cerr << "Mesh re-meshed so curve contains no single-edge components." << std::endl;
+        }
         ensureHaveIntrinsicSolver();
     }
 

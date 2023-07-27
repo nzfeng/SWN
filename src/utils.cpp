@@ -241,37 +241,39 @@ std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveN
             const SurfacePoint& pt1 = curveNodes[seg[0]];
             const SurfacePoint& pt2 = curveNodes[seg[1]];
 
-            // // For some reason, very occasionally this code fails. I checked that pt2 is indeed among the adjacent
+            // For some reason, very occasionally this code fails. I checked that pt2 is indeed among the adjacent
             // vertices of pt1; the == operator among vertices just doesn't work sometimes, I guess.
-
-            // Edge e = sharedEdge(pt1, pt2);
-            // if (e == Edge()) std::cerr << "no common edge found" << std::endl;
-            // if (e == Edge()) return std::vector<Halfedge>();
-            // if (pt1.type != SurfacePointType::Vertex || pt2.type != SurfacePointType::Vertex)
-            //     return std::vector<Halfedge>();
-
-            // Halfedge he = (pt1.vertex == e.firstVertex()) ? e.halfedge() : e.halfedge().twin();
-            // curveHalfedges.push_back(he);
-
-            if (pt1.type != SurfacePointType::Vertex || pt2.type != SurfacePointType::Vertex) {
-                return std::vector<Halfedge>();
-            }
-
-            Halfedge he = Halfedge();
-            for (Halfedge heA : pt1.vertex.outgoingHalfedges()) {
-                if (heA.tipVertex() == pt2.vertex) {
-                    he = heA;
-                    break;
-                }
-            }
-
-            if (he != Halfedge()) {
-                curveHalfedges.push_back(he);
-            } else {
+            Edge e = sharedEdge(pt1, pt2);
+            if (e == Edge()) {
                 std::cerr << "Input curve segment between <" << pt1 << "> and <" << pt2
                           << "> is not constrained to mesh edges." << std::endl;
                 return std::vector<Halfedge>();
             }
+            if (pt1.type != SurfacePointType::Vertex || pt2.type != SurfacePointType::Vertex)
+                return std::vector<Halfedge>();
+
+            Halfedge he = (pt1.vertex == e.firstVertex()) ? e.halfedge() : e.halfedge().twin();
+            curveHalfedges.push_back(he);
+
+            // if (pt1.type != SurfacePointType::Vertex || pt2.type != SurfacePointType::Vertex) {
+            //     return std::vector<Halfedge>();
+            // }
+
+            // Halfedge he = Halfedge();
+            // for (Halfedge heA : pt1.vertex.outgoingHalfedges()) {
+            //     if (heA.tipVertex() == pt2.vertex) {
+            //         he = heA;
+            //         break;
+            //     }
+            // }
+
+            // if (he != Halfedge()) {
+            //     curveHalfedges.push_back(he);
+            // } else {
+            //     std::cerr << "Input curve segment between <" << pt1 << "> and <" << pt2
+            //               << "> is not constrained to mesh edges." << std::endl;
+            //     return std::vector<Halfedge>();
+            // }
         }
     } else {
         for (const auto& seg : curveEdges) {
@@ -461,8 +463,14 @@ void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Hal
 
     if (curveEdges.size() > 0 && &geometry.mesh == getMesh(curveNodes[0])) {
         std::vector<Vector3> nodes;
-        for (const SurfacePoint& p : curveNodes) nodes.push_back(p.interpolate(geometry.vertexPositions));
-        polyscope::registerCurveNetwork("input curve", nodes, curveEdges)->setColor({0, 0, 0})->setEnabled(true);
+        std::vector<std::array<size_t, 2>> edges;
+        for (const auto& pair : curveEdges) {
+            size_t N = nodes.size();
+            nodes.push_back(curveNodes[pair[0]].interpolate(geometry.vertexPositions));
+            nodes.push_back(curveNodes[pair[1]].interpolate(geometry.vertexPositions));
+            edges.push_back({N, N + 1});
+        }
+        polyscope::registerCurveNetwork("input curve", nodes, edges)->setColor({0, 0, 0})->setEnabled(true);
     }
     if (dualChain.size() > 0) {
         std::vector<Vector3> nodes;

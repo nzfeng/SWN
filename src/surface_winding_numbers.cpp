@@ -204,8 +204,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
-    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl;          // debugging
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("b", b); // debugging
+    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
 
     // Apply shifts to recover u.
     CornerData<double> u(mesh);
