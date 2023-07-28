@@ -1,8 +1,11 @@
 # Winding Numbers on Discrete Surfaces
 
+**WARNING:** This repo is still under construction! The full code release will be soon, probably before SIGGRAPH 2023.
+
 C++ demo for "[Winding Numbers on Discrete Surfaces](https://nzfeng.github.io/research/WNoDS/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html), [Mark Gillespie](https://markjgillespie.com/), and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2023.
 
 Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
+
 Talk (10 minutes): [link]()
 
 ![teaser image](media/teaser.png)
