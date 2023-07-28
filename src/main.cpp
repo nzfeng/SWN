@@ -660,11 +660,12 @@ int main(int argc, char** argv) {
 
         // Register the mesh with polyscope
         MESHROOT = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
-        psMesh = polyscope::registerSurfaceMesh(MESHNAME, geometry->inputVertexPositions, mesh->getFaceVertexList());
-        psMesh->setAllPermutations(polyscopePermutations(*mesh));
+        psMesh =
+            polyscope::registerSurfaceMesh(MESHNAME, getGeom().inputVertexPositions, getMesh().getFaceVertexList());
+        psMesh->setAllPermutations(polyscopePermutations(getMesh()));
 
         // Display curve.
-        displayCurves(*geometry, curveHalfedges, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
+        displayCurves(getGeom(), getCurveHalfedges(), CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
 
         polyscope::show();
     }
