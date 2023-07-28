@@ -13,6 +13,63 @@ int roundToNearestInteger(double x) {
     return (int)y;
 }
 
+/* Implement the rounding procedure described in Section 3.5.1. */
+FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedge>& curve) {
+
+    // Compute global shift.
+    SurfaceMesh* mesh = func.getMesh();
+    Vector<int> chain = convertToChain(*mesh, curve);
+    double avgShiftOnOneSide = 0.;
+    size_t nValidJumps = 0;
+    for (Edge e : mesh->edges()) {
+        size_t eIdx = e.getIndex();
+        if (!e.isBoundary() && chain[eIdx] != 0) {
+            Halfedge he = (chain[eIdx] > 0) ? e.halfedge() : e.halfedge().twin();
+            Corner cA = he.corner();
+            Corner cB = he.next().corner();
+            if (std::isnan(func[cA]) || std::isnan(func[cB])) continue;
+            double avg = 0.5 * (func[cA] + func[cB]);
+            double avgInt = roundToNearestInteger(avg);
+            double shift = avgInt - avg;
+            avgShiftOnOneSide += shift;
+            nValidJumps += 1;
+        }
+    }
+    avgShiftOnOneSide = nValidJumps == 0 ? 0 : avgShiftOnOneSide / nValidJumps;
+
+    // Threshold on a per-face basis
+    FaceData<double> F(*mesh);
+    for (Face f : mesh->faces()) {
+        double avgVal = 0.;
+        double nValidCorners = 0.;
+        for (Corner c : f.adjacentCorners()) {
+            if (std::isnan(func[c])) continue;
+            avgVal += func[c] + avgShiftOnOneSide;
+            nValidCorners += 1;
+        }
+        avgVal /= nValidCorners;
+        F[f] = roundToNearestInteger(avgVal);
+    }
+    return F;
+}
+
+
+// ===================== OPERATORS
+
+
+/* Apparently geometry-central can only build d2 as part of geom.DECoperators(), but strictly speaking d2 doesn't need
+ * geometry. So just build the matrix myself here. */
+SparseMatrix<double> b2(SurfaceMesh& mesh) {
+
+    SparseMatrix<double> B(mesh.nEdges(), mesh.nFaces());
+    std::vector<Eigen::Triplet<double>> tripletList;
+    for (Face f : mesh.faces()) {
+        for (Halfedge he : f.adjacentHalfedges()) {
+            tripletList.emplace_back(he.edge().getIndex(), f.getIndex(), (he.orientation() ? 1 : -1));
+        }
+    }
+    return B;
+}
 
 // ===================== I/O
 
@@ -197,6 +254,24 @@ void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::ve
     }
 }
 
+void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions,
+                       const std::vector<std::vector<Halfedge>>& curveHalfedges, const std::string& filename) {
+
+    std::vector<SurfacePoint> curveNodes;
+    std::vector<std::vector<std::array<size_t, 2>>> curveEdges;
+    for (const auto& curve : curveHalfedges) {
+        curveEdges.emplace_back();
+        auto& currCurve = curveEdges.back();
+        for (const Halfedge& he : curve) {
+            curveNodes.emplace_back(he.tailVertex());
+            curveNodes.emplace_back(he.tipVertex());
+            size_t N = curveNodes.size();
+            currCurve.push_back({N - 2, N - 1});
+        }
+    }
+    exportCurvesAsOBJ(vertexPositions, curveNodes, curveEdges, filename);
+}
+
 
 // ===================== CURVE MANIPULATION
 
@@ -337,16 +412,12 @@ std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveN
     return curveHalfedges;
 }
 
-Vector<int> convertToChain(IntrinsicGeometryInterface& geom, const std::vector<Halfedge>& curve) {
+Vector<int> convertToChain(const SurfaceMesh& mesh, const std::vector<Halfedge>& curve) {
 
-    SurfaceMesh& mesh = geom.mesh;
     Vector<int> chain = Vector<int>::Zero(mesh.nEdges());
-    geom.requireEdgeIndices();
     for (const Halfedge& he : curve) {
-        size_t eIdx = geom.edgeIndices[he.edge()];
-        chain[eIdx] += he.orientation() ? 1 : -1;
+        chain[he.edge().getIndex()] += he.orientation() ? 1 : -1;
     }
-    geom.unrequireEdgeIndices();
     return chain;
 }
 
@@ -361,7 +432,7 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
                                                       const std::vector<Halfedge>& curveHalfedges) {
 
     SurfaceMesh& mesh = geom.mesh;
-    Vector<int> chain = convertToChain(geom, curveHalfedges);
+    Vector<int> chain = convertToChain(mesh, curveHalfedges);
     double eps = 1e-5;
     size_t E = mesh.nEdges();
     std::vector<std::vector<Halfedge>> curves;
@@ -481,6 +552,57 @@ getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNode
         }
     }
     return curves;
+}
+
+/*
+ * Given the input curve and computed residual function, return:
+ *     - the bounding parts of the input curve
+ *     - the nonbounding parts of the input curve
+ * as edges in the mesh.
+ */
+std::tuple<std::vector<Halfedge>, std::vector<Halfedge>>
+getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc) {
+
+    SurfaceMesh* mesh = vFunc.getMesh();
+    if (mesh == nullptr) return std::make_tuple(std::vector<Halfedge>(), std::vector<Halfedge>());
+
+    std::vector<Halfedge> bound, nonbound;
+    // TODO
+    return std::make_tuple(bound, nonbound);
+}
+
+/*
+ * Given the input curve and a function, extract the function's jump locus (restricted to mesh edges) as a curve.
+ */
+std::vector<Halfedge> getCompletedLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
+                                        double epsilon) {
+    SurfaceMesh* mesh = func.getMesh();
+    if (mesh == nullptr) return std::vector<Halfedge>();
+
+    // Apply rounding procedure.
+    Vector<double> W = round(func, curveHalfedges).toVector();
+    // Get (oriented) boundary.
+    SparseMatrix<double> B = b2(*mesh);
+    Vector<double> BW = B * W;
+
+    std::vector<Halfedge> curve;
+    for (Edge e : mesh->edges()) {
+        double c = BW[e.getIndex()];
+        Halfedge he = e.halfedge();
+        if (abs(c) > epsilon) curve.push_back(c > 0. ? he : he.twin());
+    }
+    return curve;
+}
+
+/* Contour the input, but just extract the isocontour (don't snap to mesh edges.) */
+std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
+getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
+                          double epsilon) {
+
+    std::vector<SurfacePoint> contourNodes;
+    std::vector<std::array<size_t, 2>> contourEdges;
+    // TODO
+    return std::make_tuple(contourNodes, contourEdges);
 }
 
 // ===================== MESH MUTATION

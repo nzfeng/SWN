@@ -22,6 +22,12 @@ int mod(int a, int b); // Pythonic modulus
 
 int roundToNearestInteger(double x);
 
+FaceData<double> round(const CornerData<double>& f, const std::vector<Halfedge>& curve);
+
+// ===================== OPERATORS
+
+SparseMatrix<double> b2(SurfaceMesh& mesh);
+
 // ===================== I/O
 
 /* Get home directory of a mesh file. */
@@ -40,12 +46,14 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
                 std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
                 int offset = -1);
 
-// write output scalar functions; also functions for outputting curves (curve completions + completion of nonbounding
-// loops)
+// TODO: write output scalar functions
 
 /* Input curves are already assumed to have been organized into connected components. */
 void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
                        const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename);
+
+void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions,
+                       const std::vector<std::vector<Halfedge>>& curveHalfedges, const std::string& filename);
 
 // ===================== CURVE MANIPULATION
 
@@ -56,7 +64,7 @@ SurfacePoint reinterpretTo(const SurfacePoint& p, SurfaceMesh& otherMesh);
 std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveNodes,
                                          const std::vector<std::array<size_t, 2>>& curveEdges);
 
-Vector<int> convertToChain(IntrinsicGeometryInterface& geom, const std::vector<Halfedge>& curve);
+Vector<int> convertToChain(const SurfaceMesh& mesh, const std::vector<Halfedge>& curve);
 
 std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface& geom,
                                                       const std::vector<Halfedge>& curveHalfedges);
@@ -64,6 +72,17 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 std::vector<std::vector<std::array<size_t, 2>>>
 getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNodes,
                    const std::vector<std::array<size_t, 2>>& curveEdges);
+
+std::tuple<std::vector<Halfedge>, std::vector<Halfedge>>
+getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc,
+                      double epsilon = 1e-2);
+
+std::vector<Halfedge> getCompletedLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
+                                        double epsilon = 1e-2);
+
+std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
+getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
+                          double epsilon = 1e-2);
 
 
 // ===================== MESH MUTATION

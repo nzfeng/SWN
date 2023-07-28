@@ -36,38 +36,45 @@ class SurfaceWindingNumbersSolver {
 
     // === Solve
 
+    // The only reason the solve() functions aren't const is because they update the intermediate quantities stored in
+    // member variables.
+
     /* Curve(s) is specified as a primal 1-chain. Edges of the curve that pass through non-manifold vertices are
      * omitted. (If this is undesirable, consider using a dual 1-chain; see below.)
      */
-    CornerData<double> solve(const Vector<double>& primalChain) const;
+    CornerData<double> solve(const Vector<double>& primalChain);
 
     /* Curve(s) is specified as an unordered collection of oriented mesh edges. */
-    CornerData<double> solve(const std::vector<Halfedge>& curve) const;
+    CornerData<double> solve(const std::vector<Halfedge>& curve);
 
     /* Curve is specified as an ordered sequence of mesh vertices. */
-    CornerData<double> solve(const std::vector<Vertex>& curve) const;
+    CornerData<double> solve(const std::vector<Vertex>& curve);
 
     /* Multiple curves are specified as ordered sequences of vertices. */
-    CornerData<double> solve(const std::vector<std::vector<Vertex>>& curves) const;
+    CornerData<double> solve(const std::vector<std::vector<Vertex>>& curves);
 
     /* Curve(s) is specified as a *dual* 1-chain, where each edge of the curve is specified as a pair of dual vertices
      * (mesh faces) indicating an oriented dual edge from the first face to the second.
      *
      * Specifying the curve as a dual 1-chain is the only method that achieves full generality, in that it can be used
      * to un-ambiguously specify the curve's sides and orientations on non-manifold or non-orientable meshes. */
-    CornerData<double> solve(const std::vector<std::array<Face, 2>>& curve) const;
+    CornerData<double> solve(const std::vector<std::array<Face, 2>>& curve);
 
     /* Curve(s) is specified as an unordered collection of edges between barycentric points on the mesh.
      *
      * The jump Laplace equation is solved using a Poisson formulation, but homology correction is no longer possible.
      */
     CornerData<double> solve(const std::vector<SurfacePoint>& curveNodes,
-                             const std::vector<std::array<size_t, 2>>& curveEdges) const;
+                             const std::vector<std::array<size_t, 2>>& curveEdges);
 
     // === Parameters
     double epsilon = 1e-2;
     bool doHomologyCorrection = true;
     bool approximateResidual = false;
+
+    // === Intermediate solve quantities
+    CornerData<double> uFunction, vFunction, wFunction;
+    EdgeData<double> gFunction; // g := Jv
 
   private:
     // === Members

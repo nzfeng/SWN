@@ -26,7 +26,6 @@ If this code contributes to academic work, please cite as:
     articleno = {36}
 }
 ```
-TODO: Document export functions.
 
 # Getting started
 
@@ -65,6 +64,8 @@ You can pass several solve options to the command line, options which are also s
 |`--version`, `-v`| Version info |
 |`--help`, `-h`| Display help |
 
+TODO: CL flags for all output?
+
 ## Curve input
 TODO
 
@@ -75,12 +76,6 @@ The input curve can be specified either as a discrete _1-chain_ or a _dual 1-cha
 
 <!-- Ordinarily, we assume that jumps increase in the direction obtained by rotating the tangent 90 degrees counter-clockwise. On
 a nonorientable surface, however, there is no consistent notion of counter-clockwise—even though curves can still meaningfully bound regions -->
-
-## Homogenous texture coordinates
-
-For better visualization of the solution around curve endpoints, we perform projective interpolation (see Figure 4 from the paper.) 
-
-By default, we output texture coordinates in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures you can interpolate the 3d coordinates linearly across each triangle. Then, for each pixel you perform a homogeneous divide, dividing the first two coordinates by the last coordinate to obtain the final uv texture coordinates. This can be done e.g. in a shader or via shader nodes in Blender (see `Example.blend` for an example).
 
 ## Re-meshing
 
@@ -98,7 +93,21 @@ Notes:
 * Only manifold meshes can be intrinsically re-triangulated.
 * Delaunay refinement may not terminate with a minimum angle value >30 degrees.
 
-# Visualization
+# Output
+
+From the GUI menu, you can export the solution, as well as other intermediate functions, as an OBJ file containing both the mesh and texture coordinates. 
+
+From the GUI menu, you can also export curves as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). In most 3D graphics software, how smooth a curve is rendered depends on its connectivity (i.e., there can be noticeable gaps between curves specified as separate segments.) Therefore, this program will automatically greedily compute the connected components of the curve before exporting, so that the curve can be written with maximum connectivity and hence yield maximum smoothness during rendering. 
+
+Whenever one calls an export function, the data that gets exported is from most recently computed solution.
+
+## Homogenous texture coordinates
+
+For better visualization of the solution around curve endpoints, the Polyscope shader performs projective interpolation (see Figure 4 from the paper.) 
+
+By default, we output texture coordinates in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures you can interpolate the 3d coordinates linearly across each triangle. Then, for each pixel you perform a homogeneous divide, dividing the first two coordinates by the last coordinate to obtain the final uv texture coordinates. This can be done e.g. in a shader or via shader nodes in Blender (see `Example.blend` for an example).
+
+## Visualization
 
 The `render/` directory contains an example Blender file (`Example.blend`) that can load and visualize meshes and curves, with the SWN solution. 
 

@@ -8,7 +8,7 @@
  * Output: The winding number function on corners. Corners adjacent to interior endpoints will have placeholder values
  * SPECIAL_VAL; their values are to be interpolated using the scheme described in Section 2.3.2.
  */
-CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chain) const {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chain) {
 
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
@@ -76,13 +76,16 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex); // debugging
     polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
     polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("outgoingHalfedges", outgoingHalfedges);
-    CornerData<double> w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
-    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("u", w); // debugging
-    std::cerr << "u min: " << w.toVector().minCoeff() << "\tu max: " << w.toVector().maxCoeff()
+    wFunction = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
+    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("u", wFunction); // debugging
+    std::cerr << "u min: " << wFunction.toVector().minCoeff() << "\tu max: " << wFunction.toVector().maxCoeff()
               << std::endl; // debugging
+    uFunction = wFunction;
+    vFunction = CornerData<double>(mesh, 0);
+    gFunction = EdgeData<double>(mesh, 0);
     if (!simplyConnected && doHomologyCorrection) {
         std::cerr << "Doing homology correction..." << std::endl;
-        Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, w);
+        Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, wFunction);
         polyscope::getSurfaceMesh("input mesh")
             ->addOneFormIntrinsicVectorQuantity("omega", gamma, polyscopeEdgeOrientations(mesh)); // debugging
         if (!isCurveClosed) gamma = harmonicComponent(gamma);
@@ -90,29 +93,29 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
             ->addOneFormIntrinsicVectorQuantity("gamma", gamma, polyscopeEdgeOrientations(mesh)); // debugging
         CornerData<double> v =
             approximateResidual ? approximateResidualFunction(chain, endpoints, gamma) : residualFunction(chain, gamma);
+        vFunction = v;
+        gFunction = EdgeData<double>(mesh, jumpDerivative(v));
         polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v", v); // debugging
         std::cerr << "v min: " << v.toVector().minCoeff() << "\tv max: " << v.toVector().maxCoeff()
                   << std::endl; // debugging
         c = subtractJumpDerivative(chain, interiorVertices, isInteriorEndpoint, outgoingHalfedgeOnCurve, v);
         polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c); // debugging
-        w = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
-        // TODO: Do rounding procedure
+        wFunction = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
     }
-    // TODO: Store intermediate computed quantities (u, v, g) as member variables.
-    return w;
+    return wFunction;
 }
 
 // input options: the chain directly (on orientable meshes, primal and dual 1-chain are in correspondence), sequence of
 // vertices, collection of halfedges, pairs of faces (for non-manifold or non-orientable meshes)
 
-CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Vertex>& curve) const {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Vertex>& curve) {
 
     // Convert the input curve to a 1-chain, then call generic solver.
     Vector<double> chain = convertToChain(curve);
     return solve(chain);
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::vector<Vertex>>& curves) const {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::vector<Vertex>>& curves) {
 
     // Convert the input curve to a 1-chain, then call generic solver.
     Vector<double> chain = Vector<double>::Zero(mesh.nEdges());
@@ -120,21 +123,21 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::vec
     return solve(chain);
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Halfedge>& curve) const {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Halfedge>& curve) {
 
     // Convert the input curve to a 1-chain, then call generic solver.
     Vector<double> chain = convertToChain(curve);
     return solve(chain);
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::array<Face, 2>>& curve) const {
+CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::array<Face, 2>>& curve) {
 
     // TODO
     return CornerData<double>(mesh, 0);
 }
 
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<SurfacePoint>& curveNodes,
-                                                      const std::vector<std::array<size_t, 2>>& curveEdges) const {
+                                                      const std::vector<std::array<size_t, 2>>& curveEdges) {
 
     // TODO: Call Poisson solver
     return CornerData<double>(mesh, 0);
