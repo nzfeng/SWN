@@ -97,9 +97,9 @@ class SurfaceWindingNumbersSolver {
                                                  const std::vector<Vertex>& interiorVertices,
                                                  const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve) const;
 
-    CornerData<double> solveJumpEquation(const std::vector<Vertex>& interiorVertices,
-                                         const VertexData<bool>& isInteriorEndpoint,
-                                         const CornerData<double>& reducedCoordinates) const;
+    CornerData<double> solveJumpLaplaceEquation(const std::vector<Vertex>& interiorVertices,
+                                                const VertexData<bool>& isInteriorEndpoint,
+                                                const CornerData<double>& reducedCoordinates) const;
 
     Vector<double> DarbouxDerivative(const VertexData<bool>& isInteriorEndpoint, const CornerData<double>& u) const;
 

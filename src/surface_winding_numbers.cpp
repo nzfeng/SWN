@@ -12,8 +12,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
 
     // Pre-compute curve quantities.
     VertexData<bool> isInteriorEndpoint(mesh, false);
-    VertexData<bool> isInteriorVertex(mesh, false); // debugging
-    EdgeData<bool> outgoingHalfedges(mesh, false);  // debugging
+    VertexData<bool> isInteriorVertex(mesh, false);
     std::vector<Vertex> interiorVertices;
     // Warning: On non-orientable meshes, applying the boundary operator (computed as a simple adjacency matrix) may not
     // yield the expected results, e.g. there may be non-zero boundary for what should be closed curve.
@@ -64,7 +63,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
             }
             if (isInteriorVertex[v]) {
                 outgoingHalfedgeOnCurve.insert(std::make_pair(v, outgoingHe));
-                outgoingHalfedges[outgoingHe.edge()] = true; // debugging
             }
         }
     }
@@ -72,35 +70,20 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     geom.unrequireEdgeIndices();
 
     CornerData<double> c = computeReducedCoordinates(chain, interiorVertices, outgoingHalfedgeOnCurve);
-    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c);                               // debugging
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorVertex", isInteriorVertex); // debugging
-    polyscope::getSurfaceMesh("input mesh")->addVertexScalarQuantity("isInteriorEndpoint", isInteriorEndpoint);
-    polyscope::getSurfaceMesh("input mesh")->addEdgeScalarQuantity("outgoingHalfedges", outgoingHalfedges);
-    wFunction = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
-    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("u", wFunction); // debugging
-    std::cerr << "u min: " << wFunction.toVector().minCoeff() << "\tu max: " << wFunction.toVector().maxCoeff()
-              << std::endl; // debugging
+    wFunction = solveJumpLaplaceEquation(interiorVertices, isInteriorEndpoint, c);
     uFunction = wFunction;
     vFunction = CornerData<double>(mesh, 0);
     gFunction = EdgeData<double>(mesh, 0);
     if (!simplyConnected && doHomologyCorrection) {
         std::cerr << "Doing homology correction..." << std::endl;
         Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, wFunction);
-        polyscope::getSurfaceMesh("input mesh")
-            ->addOneFormIntrinsicVectorQuantity("omega", gamma, polyscopeEdgeOrientations(mesh)); // debugging
         if (!isCurveClosed) gamma = harmonicComponent(gamma);
-        polyscope::getSurfaceMesh("input mesh")
-            ->addOneFormIntrinsicVectorQuantity("gamma", gamma, polyscopeEdgeOrientations(mesh)); // debugging
         CornerData<double> v =
             approximateResidual ? approximateResidualFunction(chain, endpoints, gamma) : residualFunction(chain, gamma);
         vFunction = v;
         gFunction = EdgeData<double>(mesh, jumpDerivative(v));
-        polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v", v); // debugging
-        std::cerr << "v min: " << v.toVector().minCoeff() << "\tv max: " << v.toVector().maxCoeff()
-                  << std::endl; // debugging
         c = subtractJumpDerivative(chain, interiorVertices, isInteriorEndpoint, outgoingHalfedgeOnCurve, v);
-        polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("c", c); // debugging
-        wFunction = solveJumpEquation(interiorVertices, isInteriorEndpoint, c);
+        wFunction = solveJumpLaplaceEquation(interiorVertices, isInteriorEndpoint, c);
     }
     return wFunction;
 }
@@ -187,9 +170,10 @@ CornerData<double> SurfaceWindingNumbersSolver::computeReducedCoordinates(
  * Output: A function u. If doing projective interpolation (Section 2.3.2), values at corners adjacent to interior
  * endpoints are left undefined, to be interpolated later.
  */
-CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vector<Vertex>& interiorVertices,
-                                                                  const VertexData<bool>& isInteriorEndpoint,
-                                                                  const CornerData<double>& reducedCoordinates) const {
+CornerData<double>
+SurfaceWindingNumbersSolver::solveJumpLaplaceEquation(const std::vector<Vertex>& interiorVertices,
+                                                      const VertexData<bool>& isInteriorEndpoint,
+                                                      const CornerData<double>& reducedCoordinates) const {
 
     // Omit curve endpoints from the system. First map existing vertices to their new DOF indices.
     VertexData<size_t> DOFindex(mesh);
@@ -207,12 +191,12 @@ CornerData<double> SurfaceWindingNumbersSolver::solveJumpEquation(const std::vec
     geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
-    std::cerr << "[Lu_0 - b]: " << (L * u0 - b).norm() << std::endl; // debugging
 
     // Apply shifts to recover u.
-    CornerData<double> u(mesh);
+    CornerData<double> u(mesh, SPECIAL_VAL);
     geom.requireVertexIndices();
     for (Vertex v : mesh.vertices()) {
+        if (isInteriorEndpoint[v]) continue;
         size_t idx = DOFindex[v];
         for (Corner c : v.adjacentCorners()) u[c] = u0[idx] + reducedCoordinates[c];
     }

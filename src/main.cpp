@@ -465,9 +465,21 @@ void solve() {
                 w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 LAST_SOLVE.curveMode = CurveMode::BARYCENTRIC;
             }
-            if (USING_GUI) psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
-            Vector<double> wVector = w.toVector();
-            std::cerr << "w min: " << wVector.minCoeff() << "\tw max: " << wVector.maxCoeff() << std::endl;
+            if (USING_GUI) {
+                psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
+                psMesh->addCornerScalarQuantity("u", SWNSolver->uFunction)->setEnabled(false);
+                psMesh->addCornerScalarQuantity("v", SWNSolver->vFunction)->setEnabled(false);
+                Vector<double> wVector = w.toVector();
+                Vector<double> uVector = SWNSolver->uFunction.toVector();
+                Vector<double> vVector = SWNSolver->vFunction.toVector();
+                double minVal, maxVal;
+                std::tie(minVal, maxVal) = minMax(uVector);
+                std::cerr << "u min: " << minVal << "\tu max: " << maxVal << std::endl;
+                std::tie(minVal, maxVal) = minMax(vVector);
+                std::cerr << "v min: " << minVal << "\tv max: " << maxVal << std::endl;
+                std::tie(minVal, maxVal) = minMax(wVector);
+                std::cerr << "w min: " << minVal << "\tw max: " << maxVal << std::endl;
+            }
             break;
         }
         case (SolverMode::IntrinsicMesh): {

@@ -13,6 +13,20 @@ int roundToNearestInteger(double x) {
     return (int)y;
 }
 
+std::tuple<double, double> minMax(const Vector<double>& vec) {
+
+    const double inf = std::numeric_limits<double>::infinity();
+    double maxVal = -inf;
+    double minVal = inf;
+    for (size_t i = 0; i < vec.size(); i++) {
+        double val = vec[i];
+        if (std::isnan(val)) continue;
+        maxVal = std::max(maxVal, val);
+        minVal = std::min(minVal, val);
+    }
+    return std::make_tuple(minVal, maxVal);
+}
+
 /* Implement the rounding procedure described in Section 3.5.1. */
 FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedge>& curve) {
 

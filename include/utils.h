@@ -24,6 +24,9 @@ int roundToNearestInteger(double x);
 
 FaceData<double> round(const CornerData<double>& f, const std::vector<Halfedge>& curve);
 
+/* Get min and max of a vector, ignoring NaNs. */
+std::tuple<double, double> minMax(const Vector<double>& vec);
+
 // ===================== OPERATORS
 
 SparseMatrix<double> b2(SurfaceMesh& mesh);
