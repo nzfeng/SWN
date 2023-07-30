@@ -32,9 +32,13 @@ If this code contributes to academic work, please cite as:
 
 # Getting started
 
+## Gurobi
 The program relies on Gurobi to solve linear programs, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
+
+TODO: editing custom path in `cmake/modules/FindGUROBI.cmake`
 <!-- [How do I resolve "undefined reference" errors while linking Gurobi in C++?](https://support.gurobi.com/hc/en-us/articles/360039093112) -->
 
+## Running the program
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
 cd SWN

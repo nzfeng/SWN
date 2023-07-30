@@ -203,8 +203,8 @@ bool splitEdgesIfNecessary(const std::vector<Halfedge>& halfedges) {
         chain[e] += sign;
     }
 
-    // Determine curve components.
-    std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, halfedges);
+    // Determine curve components. In this case, components must be terminated by curve endpoints.
+    std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, halfedges, true);
 
     MutationManager mm(*manifoldMesh, *manifoldGeom);
 

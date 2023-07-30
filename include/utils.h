@@ -33,7 +33,11 @@ std::tuple<double, double> minMax(const Vector<double>& vec);
 
 // ===================== OPERATORS
 
-SparseMatrix<double> b2(SurfaceMesh& mesh);
+template <typename T>
+SparseMatrix<T> b1(SurfaceMesh& mesh);
+
+template <typename T>
+SparseMatrix<T> b2(SurfaceMesh& mesh);
 
 CornerData<Vector2> toProjectiveCoordinates(const CornerData<double>& u);
 
@@ -78,7 +82,8 @@ std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveN
 Vector<int> convertToChain(const SurfaceMesh& mesh, const std::vector<Halfedge>& curve);
 
 std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface& geom,
-                                                      const std::vector<Halfedge>& curveHalfedges);
+                                                      const std::vector<Halfedge>& curveHalfedges,
+                                                      bool useEndpoints = false);
 
 std::vector<std::vector<std::array<size_t, 2>>>
 getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNodes,

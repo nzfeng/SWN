@@ -75,17 +75,31 @@ FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedg
 // ===================== OPERATORS
 
 
-/* Apparently geometry-central can only build d2 as part of geom.DECoperators(), but strictly speaking d2 doesn't need
+/* Apparently geometry-central can only build D as part of geom.DECoperators(), but strictly speaking D doesn't need
  * geometry. So just build the matrix myself here. */
-SparseMatrix<double> b2(SurfaceMesh& mesh) {
+template <typename T>
+SparseMatrix<T> b1(SurfaceMesh& mesh) {
+    SparseMatrix<T> B(mesh.nVertices(), mesh.nEdges());
+    std::vector<Eigen::Triplet<T>> tripletList;
+    for (Edge e : mesh.edges()) {
+        size_t eIdx = e.getIndex();
+        tripletList.emplace_back(e.firstVertex().getIndex(), eIdx, -1);
+        tripletList.emplace_back(e.secondVertex().getIndex(), eIdx, 1);
+    }
+    B.setFromTriplets(tripletList.begin(), tripletList.end());
+    return B;
+}
 
-    SparseMatrix<double> B(mesh.nEdges(), mesh.nFaces());
-    std::vector<Eigen::Triplet<double>> tripletList;
+template <typename T>
+SparseMatrix<T> b2(SurfaceMesh& mesh) {
+    SparseMatrix<T> B(mesh.nEdges(), mesh.nFaces());
+    std::vector<Eigen::Triplet<T>> tripletList;
     for (Face f : mesh.faces()) {
         for (Halfedge he : f.adjacentHalfedges()) {
             tripletList.emplace_back(he.edge().getIndex(), f.getIndex(), (he.orientation() ? 1 : -1));
         }
     }
+    B.setFromTriplets(tripletList.begin(), tripletList.end());
     return B;
 }
 
@@ -465,10 +479,12 @@ Vector<int> convertToChain(const SurfaceMesh& mesh, const std::vector<Halfedge>&
  * in Blender will have unsightly gaps.
  */
 std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface& geom,
-                                                      const std::vector<Halfedge>& curveHalfedges) {
+                                                      const std::vector<Halfedge>& curveHalfedges, bool useEndpoints) {
 
     SurfaceMesh& mesh = geom.mesh;
     Vector<int> chain = convertToChain(mesh, curveHalfedges);
+    SparseMatrix<int> B = b1<int>(mesh);
+    Vector<int> boundary = B * chain;
     double eps = 1e-5;
     size_t E = mesh.nEdges();
     std::vector<std::vector<Halfedge>> curves;
@@ -494,6 +510,7 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
             Halfedge currHe = startHe;
             while (true) {
                 Vertex v = currHe.tipVertex();
+                if (useEndpoints && boundary[v.getIndex()] != 0) break;
                 bool didWeFindOne = false;
                 for (Halfedge he : v.outgoingHalfedges()) {
                     size_t eIdx = geom.edgeIndices[he.edge()];
@@ -512,6 +529,7 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
             currHe = startHe;
             while (true) {
                 Vertex v = currHe.tailVertex();
+                if (useEndpoints && boundary[v.getIndex()] != 0) break;
                 bool didWeFindOne = false;
                 for (Halfedge he : v.incomingHalfedges()) {
                     size_t eIdx = geom.edgeIndices[he.edge()];
@@ -618,7 +636,7 @@ std::vector<Halfedge> getCompletedLoops(const std::vector<Halfedge>& curveHalfed
     // Apply rounding procedure.
     Vector<double> W = round(func, curveHalfedges).toVector();
     // Get (oriented) boundary.
-    SparseMatrix<double> B = b2(*mesh);
+    SparseMatrix<double> B = b2<double>(*mesh);
     Vector<double> BW = B * W;
 
     std::vector<Halfedge> curve;
