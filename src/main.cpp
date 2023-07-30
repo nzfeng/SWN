@@ -341,20 +341,24 @@ void visualizeIntrinsicEdges() {
 /*
  * Display CornerData quantity on the common subdivision of an intrinsic triangulation.
  */
-void visualizeIntrinsicSolution(const CornerData<double>& w, const std::string& name) {
+void visualizeIntrinsicSolution(const CornerData<double>& w, const std::string& name, bool rebuild = true) {
 
     CommonSubdivision& cs = intTri->getCommonSubdivision();
     cs.constructMesh();
     // Linearly interpolate data from intrinsic mesh to the common subdivision.
-    CornerData<double> cs_w = interpolateAcrossB(cs, w);
+    // We must interpolate the projective coordinates, so that NaNs stay within corners adjacent to endpoint vertices.
+    CornerData<Vector2> cs_p = interpolateVector2AcrossB(cs, toProjectiveCoordinates(w));
+    CornerData<double> cs_w = fromProjectiveCoordinates(cs_p);
 
     ManifoldSurfaceMesh& csMesh = *cs.mesh;
     VertexData<Vector3> csPositions = cs.interpolateAcrossA(manifoldGeom->vertexPositions);
 
-    // Register and display with Polyscope
-    psCsMesh = polyscope::registerSurfaceMesh("common subdivision", csPositions, csMesh.getFaceVertexList(),
-                                              polyscopePermutations(csMesh));
-    psCsMesh->setEnabled(true);
+    if (rebuild) {
+        // Register and display with Polyscope
+        psCsMesh = polyscope::registerSurfaceMesh("common subdivision", csPositions, csMesh.getFaceVertexList(),
+                                                  polyscopePermutations(csMesh));
+        psCsMesh->setEnabled(true);
+    }
     psCsMesh->addCornerScalarQuantity(name, cs_w)->setEnabled(true);
 }
 
@@ -490,10 +494,23 @@ void solve() {
             intrinsicSolver->epsilon = EPSILON;
             LAST_SOLVE.solverMode = SolverMode::IntrinsicMesh;
             CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
-            Vector<double> wVector = w.toVector();
-            std::cerr << "w min: " << wVector.minCoeff() << "\tw max: " << wVector.maxCoeff() << std::endl;
-            if (USING_GUI) visualizeIntrinsicSolution(w, "w");
-            // transferBtoA(intTri, f_intrinsic, TransferMethod::L2);
+            if (USING_GUI) {
+                visualizeIntrinsicSolution(intrinsicSolver->uFunction, "u");
+                visualizeIntrinsicSolution(intrinsicSolver->vFunction, "v", false);
+                visualizeIntrinsicSolution(w, "w", false);
+                psMesh->setEnabled(false);
+                // transferBtoA(intTri, f_intrinsic, TransferMethod::L2);
+                Vector<double> wVector = w.toVector();
+                Vector<double> uVector = intrinsicSolver->uFunction.toVector();
+                Vector<double> vVector = intrinsicSolver->vFunction.toVector();
+                double minVal, maxVal;
+                std::tie(minVal, maxVal) = minMax(uVector);
+                std::cerr << "u min: " << minVal << "\tu max: " << maxVal << std::endl;
+                std::tie(minVal, maxVal) = minMax(vVector);
+                std::cerr << "v min: " << minVal << "\tv max: " << maxVal << std::endl;
+                std::tie(minVal, maxVal) = minMax(wVector);
+                std::cerr << "w min: " << minVal << "\tw max: " << maxVal << std::endl;
+            }
             break;
         }
     }

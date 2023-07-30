@@ -13,6 +13,10 @@ int roundToNearestInteger(double x) {
     return (int)y;
 }
 
+bool isSpecial(double x) {
+    return std::isnan(x);
+}
+
 std::tuple<double, double> minMax(const Vector<double>& vec) {
 
     const double inf = std::numeric_limits<double>::infinity();
@@ -20,7 +24,7 @@ std::tuple<double, double> minMax(const Vector<double>& vec) {
     double minVal = inf;
     for (size_t i = 0; i < vec.size(); i++) {
         double val = vec[i];
-        if (std::isnan(val)) continue;
+        if (isSpecial(val)) continue;
         maxVal = std::max(maxVal, val);
         minVal = std::min(minVal, val);
     }
@@ -41,7 +45,7 @@ FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedg
             Halfedge he = (chain[eIdx] > 0) ? e.halfedge() : e.halfedge().twin();
             Corner cA = he.corner();
             Corner cB = he.next().corner();
-            if (std::isnan(func[cA]) || std::isnan(func[cB])) continue;
+            if (isSpecial(func[cA]) || isSpecial(func[cB])) continue;
             double avg = 0.5 * (func[cA] + func[cB]);
             double avgInt = roundToNearestInteger(avg);
             double shift = avgInt - avg;
@@ -57,7 +61,7 @@ FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedg
         double avgVal = 0.;
         double nValidCorners = 0.;
         for (Corner c : f.adjacentCorners()) {
-            if (std::isnan(func[c])) continue;
+            if (isSpecial(func[c])) continue;
             avgVal += func[c] + avgShiftOnOneSide;
             nValidCorners += 1;
         }
@@ -83,6 +87,31 @@ SparseMatrix<double> b2(SurfaceMesh& mesh) {
         }
     }
     return B;
+}
+
+CornerData<Vector2> toProjectiveCoordinates(const CornerData<double>& u) {
+
+    SurfaceMesh* mesh = u.getMesh();
+    CornerData<Vector2> u_hom(*mesh);
+    for (const Corner& c : mesh->corners()) {
+        if (isSpecial(u[c])) {
+            u_hom[c] = {0., 0.};
+        } else {
+            u_hom[c] = {u[c], 1.0};
+        }
+    }
+    return u_hom;
+}
+
+CornerData<double> fromProjectiveCoordinates(const CornerData<Vector2>& u_hom) {
+
+    SurfaceMesh* mesh = u_hom.getMesh();
+    CornerData<double> u(*mesh);
+    double eps = 1e-5;
+    for (const Corner& c : mesh->corners()) {
+        u[c] = (abs(u_hom[c][1]) < eps) ? SPECIAL_VAL : u_hom[c][0] / u_hom[c][1];
+    }
+    return u;
 }
 
 // ===================== I/O
@@ -344,16 +373,9 @@ std::vector<Halfedge> convertToHalfedges(const std::vector<SurfacePoint>& curveN
                                          const std::vector<std::array<size_t, 2>>& curveEdges) {
 
     std::vector<Halfedge> curveHalfedges;
+    if (curveNodes.size() == 0 || curveEdges.size() == 0) return curveHalfedges;
 
-    SurfacePoint pt0 = curveNodes[0];
-    SurfaceMesh* mesh;
-    if (pt0.type == SurfacePointType::Vertex) {
-        mesh = pt0.vertex.getMesh();
-    } else if (pt0.type == SurfacePointType::Edge) {
-        mesh = pt0.edge.getMesh();
-    } else if (pt0.type == SurfacePointType::Face) {
-        mesh = pt0.face.getMesh();
-    }
+    SurfaceMesh* mesh = getMesh(curveNodes[0]);
 
     if (mesh->isOriented()) {
         for (const auto& seg : curveEdges) {
@@ -721,4 +743,43 @@ void displayCurves(const VertexPositionGeometry& geometry, const std::vector<Hal
         }
         polyscope::registerCurveNetwork("input curve", nodes, edges)->setColor({0, 0, 0})->setEnabled(true);
     }
+}
+
+
+CornerData<Vector2> interpolateVector2AcrossB(CommonSubdivision& cs, const CornerData<Vector2>& dataB) {
+
+    CornerData<Vector2> interp(*cs.mesh);
+    for (Vertex v : cs.mesh->vertices()) {
+        SurfacePoint posB = cs.sourcePoints[v]->posB;
+        if (posB.type == SurfacePointType::Face) {
+            // this vertex in the common subdivison lies within a face in the intrinsic mesh
+            SurfacePoint pB_face = posB.inSomeFace();
+            Face fB = pB_face.face;
+            Vector2 val = {0., 0.};
+            size_t idx = 0;
+            for (Halfedge he : fB.adjacentHalfedges()) {
+                Corner cB = he.corner();
+                val += dataB[cB] * pB_face.faceCoords[idx];
+                idx++;
+            }
+            for (Corner c : v.adjacentCorners()) {
+                interp[c] = val;
+            }
+        } else {
+            for (Corner c : v.adjacentCorners()) {
+                Face f = c.face();
+                Face fB = cs.sourceFaceB[f];
+                SurfacePoint pB_face = posB.inFace(fB);
+                Vector2 val = {0., 0.};
+                size_t idx = 0;
+                for (Halfedge he : fB.adjacentHalfedges()) {
+                    Corner cB = he.corner();
+                    val += dataB[cB] * pB_face.faceCoords[idx];
+                    idx++;
+                }
+                interp[c] = val;
+            }
+        }
+    }
+    return interp;
 }

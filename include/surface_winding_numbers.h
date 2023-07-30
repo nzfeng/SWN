@@ -81,8 +81,6 @@ class SurfaceWindingNumbersSolver {
     SurfaceMesh& mesh;
     IntrinsicGeometryInterface& geom;
 
-    double SPECIAL_VAL = std::numeric_limits<double>::quiet_NaN();
-
     bool simplyConnected;
 
     // === Solvers

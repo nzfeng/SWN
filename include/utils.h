@@ -16,6 +16,8 @@
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
+inline double SPECIAL_VAL = std::numeric_limits<double>::quiet_NaN();
+
 // ===================== NUMERICAL
 
 int mod(int a, int b); // Pythonic modulus
@@ -27,9 +29,15 @@ FaceData<double> round(const CornerData<double>& f, const std::vector<Halfedge>&
 /* Get min and max of a vector, ignoring NaNs. */
 std::tuple<double, double> minMax(const Vector<double>& vec);
 
+/* TODO: Normalize values to lie between 0 and 1. */
+
 // ===================== OPERATORS
 
 SparseMatrix<double> b2(SurfaceMesh& mesh);
+
+CornerData<Vector2> toProjectiveCoordinates(const CornerData<double>& u);
+
+CornerData<double> fromProjectiveCoordinates(const CornerData<Vector2>& u);
 
 // ===================== I/O
 
@@ -144,3 +152,5 @@ CornerData<T> interpolateAcrossB(CommonSubdivision& cs, const CornerData<T>& dat
     }
     return interp;
 }
+
+CornerData<Vector2> interpolateVector2AcrossB(CommonSubdivision& cs, const CornerData<Vector2>& dataB);

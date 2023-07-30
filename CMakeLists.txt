@@ -21,10 +21,9 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STR
 
   # using Clang (linux or apple) or GCC
   message("Using clang/gcc compiler flags")
-  SET(CMAKE_CXX_STANDARD 11)
-  #SET(BASE_CXX_FLAGS "-std=c++11 -Wall -Wextra") 
-  SET(BASE_CXX_FLAGS "-std=c++11 -Wall -Wextra -Wno-unused-label -Wno-unused-local-typedef -Wno-register -Wno-sign-compare") # quiet warnings
-  SET(DISABLED_WARNINGS " -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-missing-braces -Wno-unused-private-field")
+  SET(CMAKE_CXX_STANDARD 17)
+  SET(BASE_CXX_FLAGS "-std=c++17 -Wall -Wextra") 
+  SET(DISABLED_WARNINGS "-Wno-unused-label -Wno-unused-local-typedef -Wno-register -Wno-sign-compare -Wno-unused-parameter -Wno-unused-but-set-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-deprecated-declarations -Wno-missing-braces -Wno-unused-private-field")
   SET(TRACE_INCLUDES " -H -Wno-error=unused-command-line-argument")
 
   if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -38,15 +37,15 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STR
     SET(DISABLED_WARNINGS "${DISABLED_WARNINGS} -Wno-maybe-uninitialized -Wno-format-zero-length -Wno-unused-but-set-parameter -Wno-unused-but-set-variable")
   endif()
   
-  SET(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} ${DISABLED_WARNINGS} -std=c++11")
+  SET(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} ${DISABLED_WARNINGS} -std=c++17")
 
   include(CheckCXXCompilerFlag)
   unset(COMPILER_SUPPORTS_MARCH_NATIVE CACHE)
   CHECK_CXX_COMPILER_FLAG(-march=native COMPILER_SUPPORTS_MARCH_NATIVE)
   if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    SET(CMAKE_CXX_FLAGS_RELEASE        "-O3 -march=native -DNDEBUG -std=c++11")
+    SET(CMAKE_CXX_FLAGS_RELEASE        "-O3 -march=native -DNDEBUG -std=c++17")
   else()
-    SET(CMAKE_CXX_FLAGS_RELEASE        "-O3 -mcpu=apple-m1 -DNDEBUG -std=c++11") # Apple M1
+    SET(CMAKE_CXX_FLAGS_RELEASE        "-O3 -mcpu=apple-m1 -DNDEBUG -std=c++17") # Apple M1
   endif()
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -93,8 +92,8 @@ set(SRCS
 add_executable(main "${SRCS}")
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
 
-target_compile_options(main PUBLIC -Wno-unused-parameter -Wno-deprecated-register -std=c++11)
-target_compile_features(main PUBLIC cxx_std_11)
+target_compile_options(main PUBLIC -Wno-unused-parameter -Wno-deprecated-register -std=c++17)
+target_compile_features(main PUBLIC cxx_std_17)
 
 # add the args.hxx project which we use for command line args
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")

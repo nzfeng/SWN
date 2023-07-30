@@ -240,7 +240,7 @@ Vector<double> SurfaceWindingNumbersSolver::DarbouxDerivative(const VertexData<b
 /*
  * Input: The interior endpoints of a curve Γ.
  *
- * Output: The standard cotan Laplacian on V^*, the set of vertices minus interior endpoints.
+ * Output: The (positive-definite) standard cotan Laplacian on V^*, the set of vertices minus interior endpoints.
  */
 SparseMatrix<double> SurfaceWindingNumbersSolver::buildLaplacian(const VertexData<bool>& isInteriorEndpoint,
                                                                  const VertexData<size_t>& DOFindex,
@@ -285,7 +285,6 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
     Vector<double> RHS = Vector<double>::Zero(nDOFs);
     for (const Vertex& v : interiorVertices) {
         for (Halfedge he : v.outgoingHalfedges()) {
-            if (isInteriorEndpoint[he.tipVertex()]) continue;
             Halfedge heB = he.next().next();
             double cumJump = reducedCoordinates[he.corner()];
             double wA = geom.halfedgeCotanWeights[he];
@@ -293,10 +292,14 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
             size_t vI = DOFindex[v];
             size_t vJ = DOFindex[he.tipVertex()];
             size_t vK = DOFindex[heB.tailVertex()];
-            RHS[vI] -= wA * cumJump;
-            RHS[vJ] += wA * cumJump;
-            RHS[vI] -= wB * cumJump;
-            RHS[vK] += wB * cumJump;
+            if (!isInteriorEndpoint[he.tipVertex()]) {
+                RHS[vI] -= wA * cumJump;
+                RHS[vJ] += wA * cumJump;
+            }
+            if (!isInteriorEndpoint[heB.tailVertex()]) {
+                RHS[vI] -= wB * cumJump;
+                RHS[vK] += wB * cumJump;
+            }
         }
     }
     return RHS;
@@ -715,13 +718,6 @@ CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
     const Vector<double>& chain, const std::vector<Vertex>& interiorVertices,
     const VertexData<bool>& isInteriorEndpoint, const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve,
     const CornerData<double>& resid) const {
-
-    // Vector<double> updatedChain = chain;
-    // for (const auto& vi : interiorVertices) {
-    //     //
-    // }
-    // CornerData<double> c = computeReducedCoordinates(updatedChain, interiorVertices, outgoingHalfedgeOnCurve);
-    // return c;
 
     geom.requireEdgeIndices();
     CornerData<double> reducedCoordinates(mesh, 0);
