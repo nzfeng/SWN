@@ -52,7 +52,7 @@ enum SolverMode { ExtrinsicMesh = 0, IntrinsicMesh };
 int SOLVER_MODE = SolverMode::ExtrinsicMesh;
 bool VIS_INTRINSIC_MESH = false;
 bool USING_GUI = true;
-enum CurveExportMode { CLOSED_BOUNDING = 0, CLOSED_NONBOUNDING, CLOSED_ALL, BOUNDING, NONBOUNDING };
+enum CurveExportMode { CLOSED_BOUNDING = 0, CLOSED_NONBOUNDING, CLOSED_ALL, DECOMPOSITION };
 enum CurveMode { DUAL = 0, PRIMAL, PRIMAL_MANIFOLD, BARYCENTRIC };
 struct SolverState {
     int solverMode;
@@ -69,7 +69,6 @@ std::vector<Halfedge> curveHalfedgesOnManifold;
 std::vector<Halfedge> curveHalfedgesOnIntrinsic;
 
 // == intermediate data
-std::vector<Halfedge> BOUNDING_PARTS, NONBOUNDING_PARTS, BOUNDING_LOOPS, NONBOUNDING_LOOPS;
 std::vector<SurfacePoint> CONTOUR_NODES;
 std::vector<std::array<size_t, 2>> CONTOUR_EDGES;
 
@@ -368,34 +367,43 @@ void exportCurves(int curveExportMode) {
         case (SolverMode::ExtrinsicMesh): {
             switch (LAST_SOLVE.curveMode) {
                 case (CurveMode::DUAL): {
-                    // DUAL_CHAIN
+                    // TODO: DUAL_CHAIN
                     break;
                 }
                 case (CurveMode::PRIMAL): {
                     // curveHalfedges
                     switch (curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
-                            std::vector<Halfedge> loops = getCompletedLoops(curveHalfedges, SWNSolver->wFunction);
+                            std::vector<Halfedge> loops =
+                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
                             exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
-                            std::vector<Halfedge> loops = getCompletedLoops(curveHalfedges, SWNSolver->vFunction);
+                            std::vector<Halfedge> loops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
                             exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_ALL): {
-                            // TODO
+                            std::vector<Halfedge> bLoops =
+                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
+                            std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, bLoops);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nbLoops);
+                            components.insert(components.end(), nbCpts.begin(), nbCpts.end());
+                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
                             break;
                         }
-                        case (CurveExportMode::BOUNDING): {
-                            // TODO
-                            break;
-                        }
-                        case (CurveExportMode::NONBOUNDING): {
-                            // TODO
+                        case (CurveExportMode::DECOMPOSITION): {
+                            std::vector<Halfedge> bounding, nonbounding;
+                            std::tie(bounding, nonbounding) =
+                                getCurveDecomposition(curveHalfedges, SWNSolver->vFunction);
+                            std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*geometry, bounding);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nonbounding);
+                            exportCurvesAsOBJ(geometry->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                            exportCurvesAsOBJ(geometry->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
                             break;
                         }
                     }
@@ -403,10 +411,60 @@ void exportCurves(int curveExportMode) {
                 }
                 case (CurveMode::PRIMAL_MANIFOLD): {
                     // curveHalfedgesOnManifold
+                    switch (curveExportMode) {
+                        case (CurveExportMode::CLOSED_BOUNDING): {
+                            std::vector<Halfedge> loops =
+                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
+                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
+                            break;
+                        }
+                        case (CurveExportMode::CLOSED_NONBOUNDING): {
+                            std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
+                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
+                            break;
+                        }
+                        case (CurveExportMode::CLOSED_ALL): {
+                            std::vector<Halfedge> bLoops =
+                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
+                            std::vector<Halfedge> nbLoops =
+                                getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, bLoops);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nbLoops);
+                            components.insert(components.end(), nbCpts.begin(), nbCpts.end());
+                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
+                            break;
+                        }
+                        case (CurveExportMode::DECOMPOSITION): {
+                            std::vector<Halfedge> bounding, nonbounding;
+                            std::tie(bounding, nonbounding) =
+                                getCurveDecomposition(curveHalfedgesOnManifold, SWNSolver->vFunction);
+                            std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*geometry, bounding);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nonbounding);
+                            exportCurvesAsOBJ(geometry->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                            exportCurvesAsOBJ(geometry->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
+                            break;
+                        }
+                    }
                     break;
                 }
                 case (CurveMode::BARYCENTRIC): {
-                    // CURVE_NODES, CURVE_EDGES
+                    // TODO: CURVE_NODES, CURVE_EDGES
+                    switch (curveExportMode) {
+                        case (CurveExportMode::CLOSED_BOUNDING): {
+                            break;
+                        }
+                        case (CurveExportMode::CLOSED_NONBOUNDING): {
+                            break;
+                        }
+                        case (CurveExportMode::CLOSED_ALL): {
+                            break;
+                        }
+                        case (CurveExportMode::DECOMPOSITION): {
+                            break;
+                        }
+                    }
                     break;
                 }
             }
@@ -414,6 +472,45 @@ void exportCurves(int curveExportMode) {
         }
         case (SolverMode::IntrinsicMesh): {
             // curveHalfedgesOnIntrinsic;
+            VertexData<Vector3> vertexPositions(*intTri->intrinsicMesh);
+            for (Vertex v : intTri->intrinsicMesh->vertices()) {
+                vertexPositions[v] = intTri->vertexLocations[v].interpolate(manifoldGeom->vertexPositions);
+            }
+            switch (curveExportMode) {
+                case (CurveExportMode::CLOSED_BOUNDING): {
+                    std::vector<Halfedge> loops =
+                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
+                    std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
+                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
+                    break;
+                }
+                case (CurveExportMode::CLOSED_NONBOUNDING): {
+                    std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
+                    std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
+                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
+                    break;
+                }
+                case (CurveExportMode::CLOSED_ALL): {
+                    std::vector<Halfedge> bLoops =
+                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
+                    std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
+                    std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, bLoops);
+                    std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*intTri, nbLoops);
+                    components.insert(components.end(), nbCpts.begin(), nbCpts.end());
+                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
+                    break;
+                }
+                case (CurveExportMode::DECOMPOSITION): {
+                    std::vector<Halfedge> bounding, nonbounding;
+                    std::tie(bounding, nonbounding) =
+                        getCurveDecomposition(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
+                    std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*intTri, bounding);
+                    std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*intTri, nonbounding);
+                    exportCurvesAsOBJ(vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                    exportCurvesAsOBJ(vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
+                    break;
+                }
+            }
             break;
         }
     }
@@ -429,14 +526,6 @@ void exportCurves(int curveExportMode) {
     //     }
     //     case (CurveExportMode::CLOSED_ALL): {
     //         filename = DATA_DIR + "CompletedCurve.obj";
-    //         break;
-    //     }
-    //     case (CurveExportMode::BOUNDING): {
-    //         filename = DATA_DIR + "BoundingParts.obj";
-    //         break;
-    //     }
-    //     case (CurveExportMode::NONBOUNDING): {
-    //         filename = DATA_DIR + "NonBoundingLoops.obj";
     //         break;
     //     }
     // }
@@ -591,11 +680,8 @@ void functionCallback() {
             if (ImGui::Button("Export all completed curves")) {
                 exportCurves(CurveExportMode::CLOSED_ALL);
             }
-            if (ImGui::Button("Export bounding parts")) {
-                exportCurves(CurveExportMode::BOUNDING);
-            }
-            if (ImGui::Button("Export nonbounding parts")) {
-                exportCurves(CurveExportMode::NONBOUNDING);
+            if (ImGui::Button("Export curve decomposition (bounding + nonbounding parts")) {
+                exportCurves(CurveExportMode::DECOMPOSITION);
             }
             ImGui::TreePop();
         }

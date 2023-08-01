@@ -615,43 +615,81 @@ getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNode
  * as edges in the mesh.
  */
 std::tuple<std::vector<Halfedge>, std::vector<Halfedge>>
-getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc) {
+getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc, double epsilon) {
 
     SurfaceMesh* mesh = vFunc.getMesh();
     if (mesh == nullptr) return std::make_tuple(std::vector<Halfedge>(), std::vector<Halfedge>());
 
-    std::vector<Halfedge> bound, nonbound;
-    // TODO
+    std::vector<Halfedge> nonbound, bound;
+    std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedges, vFunc, epsilon);
+    Vector<int> chain = convertToChain(*mesh, nbLoops);
+    for (const Halfedge& he : curveHalfedges) {
+        int coeff = chain[he.edge().getIndex()];
+        if (coeff == 0 || (sgn(coeff) > 0) != he.orientation()) {
+            bound.push_back(he);
+        } else {
+            nonbound.push_back(he);
+        }
+    }
     return std::make_tuple(bound, nonbound);
 }
 
-/*
- * Given the input curve and a function, extract the function's jump locus (restricted to mesh edges) as a curve.
- */
-std::vector<Halfedge> getCompletedLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
-                                        double epsilon) {
+std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const FaceData<double>& func,
+                                   double epsilon) {
+
     SurfaceMesh* mesh = func.getMesh();
     if (mesh == nullptr) return std::vector<Halfedge>();
 
-    // Apply rounding procedure.
-    Vector<double> W = round(func, curveHalfedges).toVector();
     // Get (oriented) boundary.
     SparseMatrix<double> B = b2<double>(*mesh);
-    Vector<double> BW = B * W;
+    Vector<double> w = func.toVector();
+    Vector<double> Bw = B * w;
 
     std::vector<Halfedge> curve;
     for (Edge e : mesh->edges()) {
-        double c = BW[e.getIndex()];
+        double c = Bw[e.getIndex()];
         Halfedge he = e.halfedge();
         if (abs(c) > epsilon) curve.push_back(c > 0. ? he : he.twin());
     }
     return curve;
 }
 
+std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
+                                   double epsilon) {
+
+    SurfaceMesh* mesh = func.getMesh();
+    if (mesh == nullptr) return std::vector<Halfedge>();
+
+    // Get (oriented) boundary.
+    std::vector<Halfedge> curve;
+    for (Edge e : mesh->edges()) {
+        if (e.isBoundary()) continue;
+        Halfedge he = e.halfedge();
+        double funcA = 0.5 * (func[he.corner()] + func[he.next().corner()]);
+        double funcB = 0.5 * (func[he.twin().corner()] + func[he.twin().next().corner()]);
+        double c = funcA - funcB;
+        if (abs(c) > epsilon) curve.push_back(c > 0. ? he : he.twin());
+    }
+    return curve;
+}
+
+/*
+ * Given the input curve and a function, extract the function's jump locus (restricted to mesh edges) as a curve.
+ */
+std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges,
+                                                const CornerData<double>& func, double epsilon) {
+    SurfaceMesh* mesh = func.getMesh();
+    if (mesh == nullptr) return std::vector<Halfedge>();
+
+    // Apply rounding procedure.
+    FaceData<double> W = round(func, curveHalfedges);
+    return getJumpLocus(curveHalfedges, W, epsilon);
+}
+
 /* Contour the input, but just extract the isocontour (don't snap to mesh edges.) */
 std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
-                          double epsilon) {
+getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
+                                       double epsilon) {
 
     std::vector<SurfacePoint> contourNodes;
     std::vector<std::array<size_t, 2>> contourEdges;

@@ -20,6 +20,11 @@ inline double SPECIAL_VAL = std::numeric_limits<double>::quiet_NaN();
 
 // ===================== NUMERICAL
 
+template <typename T>
+int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 int mod(int a, int b); // Pythonic modulus
 
 int roundToNearestInteger(double x);
@@ -93,12 +98,18 @@ std::tuple<std::vector<Halfedge>, std::vector<Halfedge>>
 getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc,
                       double epsilon = 1e-2);
 
-std::vector<Halfedge> getCompletedLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
-                                        double epsilon = 1e-2);
+std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const FaceData<double>& func,
+                                   double epsilon = 1e-2);
+
+std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
+                                   double epsilon = 1e-2);
+
+std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges,
+                                                const CornerData<double>& func, double epsilon = 1e-2);
 
 std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
-                          double epsilon = 1e-2);
+getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
+                                       double epsilon = 1e-2);
 
 
 // ===================== MESH MUTATION
