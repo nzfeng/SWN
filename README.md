@@ -1,6 +1,6 @@
 # Winding Numbers on Discrete Surfaces
 
-**WARNING:** This repo is still under construction! The full code release will be soon, probably before SIGGRAPH 2023.
+**WARNING:** This repo is still under construction! The full code release will be soon; the core functionality is already implemented, but I'm currently adding better support for exporting + testing.
 
 C++ demo for "[Winding Numbers on Discrete Surfaces](https://nzfeng.github.io/research/WNoDS/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html), [Mark Gillespie](https://markjgillespie.com/), and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2023.
 
@@ -35,8 +35,7 @@ If this code contributes to academic work, please cite as:
 ## Gurobi
 The program relies on Gurobi to solve linear programs, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
 
-TODO: editing custom path in `cmake/modules/FindGUROBI.cmake`
-<!-- [How do I resolve "undefined reference" errors while linking Gurobi in C++?](https://support.gurobi.com/hc/en-us/articles/360039093112) -->
+To get CMake to find your Gurobi installation, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`.
 
 ## Running the program
 ```
@@ -44,9 +43,9 @@ git clone --recursive https://github.com/nzfeng/SWN.git
 cd SWN
 mkdir build
 cd build
-cmake -DCOMISO_BUILD_WITHOUT_BOOST=On -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j8 # or however many cores you have or want to use
-bin/main /path/to/mesh --c=/path/to/curve --viz
+bin/main /path/to/mesh --c=/path/to/curve --v
 ```
 
 A Polyscope GUI will open:
@@ -55,21 +54,21 @@ A Polyscope GUI will open:
 
 # Usage
 
-Once the executable `bin/main` has been built, running `bin/main /path/to/mesh /path/to/curve` will output the input mesh with texture coordinates containing the winding number solution. 
-
 You can pass several solve options to the command line, options which are also shown in the GUI:
+
+|argument | purpose|
+| ------------- |-------------|
+|`--c`, `--curve=input.[obj,txt]`| Filepath to input curve. |
+|`--o`, `--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates. |
 
 |flag | purpose|
 | ------------- |-------------|
-|`--curveFilename=input.[obj,txt]`| Filepath to input curve. |
-|`--allowRemeshing`=true| Allow the input surface mesh to be re-meshed |
-|`--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates |
-|`--correctNonbounding`=true| Correct for nonbounding curve components |
-|`--approximateResidual`=false| Use reduced-size linear program to approximate residual function, instead of solving a more expensive LP. |
-<!--|`--viz`| Show the GUI |-->
-|`--verbose`, `-V`| Verbose output |
-|`--version`, `-v`| Version info |
-|`--help`, `-h`| Display help |
+|`--nM`, `--noRemeshing`| Disallow the input surface mesh from being re-meshed. Remeshing is allowed by default. |
+|`--nD`, `--noDecomposition`| Don't decompose the curve & identify nonbounding curve components. Curve decomposition is on by default. |
+|`--r`, `--approximateResidual`| Use reduced-size linear program to approximate the residual function, instead of solving a more expensive LP. Off by default. |
+|`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.|
+|`--V`, `--verbose`| Verbose output. |
+|`--h`, `--help`| Display help |
 
 TODO: CL flags for all output?
 
@@ -88,7 +87,7 @@ a nonorientable surface, however, there is no consistent notion of counter-clock
 
 Depending on the curve input, the surface may need to be re-meshed for optimal output.
 
-First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but homology correction is no longer possible.
+First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but I currently have no algorithm for identifying nonbounding curve components.
 
 Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. If `--allowRemeshing=true`, such edges will be subdivided so that these parts of the curve will not be ignored.
 
@@ -98,21 +97,20 @@ The GUI can perform intrinsic re-meshing, for example generating an intrinsic De
 
 Notes: 
 * Only manifold meshes can be intrinsically re-triangulated.
-* Delaunay refinement may not terminate with a minimum angle value >30 degrees.
+* Delaunay refinement may not terminate with a minimum angle value >30 degrees. If this happens, I recommend picking an angle value of 25-28 degrees.
+* Input curves must be constrained to mesh edges, and specified as primal 1-chains.
 
 # Output
 
-From the GUI menu, you can export the solution, as well as other intermediate functions, as an OBJ file containing both the mesh and texture coordinates. 
+From the GUI menu, you can export the solution, as well as other intermediate functions, as an OBJ file containing both the mesh and texture coordinates. Whenever one calls an export function, the data that gets exported is from most recently computed solution.
 
-From the GUI menu, you can also export curves as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). In most 3D graphics software, how smooth a curve is rendered depends on its connectivity (i.e., there can be noticeable gaps between curves specified as separate segments.) Therefore, this program will automatically greedily compute the connected components of the curve before exporting, so that the curve can be written with maximum connectivity and hence yield maximum smoothness during rendering. 
-
-Whenever one calls an export function, the data that gets exported is from most recently computed solution.
+From the GUI menu, you can also export curves as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). In most 3D graphics software, how smooth a curve is rendered depends on its connectivity (i.e., there can be noticeable gaps between curves specified as separate segments.) Therefore, this program will automatically greedily compute the connected components of the curve before exporting, so that the curve can be written with maximum connectivity and hence yield maximum smoothness during rendering. I have included an example Blender file that loads in a mesh and curve, and renders the winding number function stored as texture coordinates on the mesh; see the section on "Visualization" below.
 
 ## Homogenous texture coordinates
 
-For better visualization of the solution around curve endpoints, the Polyscope shader performs projective interpolation (see Figure 4 from the paper.) 
+For better visualization of the solution around curve endpoints, we implemented a projective interpolation (see Figure 4 from the paper.) The Polyscope shader in this program is already set up to perform this special interpolation, so solutions will look already good in the GUI.
 
-By default, we output texture coordinates in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures you can interpolate the 3d coordinates linearly across each triangle. Then, for each pixel you perform a homogeneous divide, dividing the first two coordinates by the last coordinate to obtain the final uv texture coordinates. This can be done e.g. in a shader or via shader nodes in Blender (see `Example.blend` for an example).
+When you export a solution, we output texture coordinates for the mesh in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures, the 3d coordinates are linearly interpolated across each triangle. Then, for each pixel the first two coordinates are divided by the last coordinate to obtain the final uv texture coordinates. This can be done in a shader, or via shader nodes in Blender -- see `Example.blend` for an example.
 
 ## Visualization
 

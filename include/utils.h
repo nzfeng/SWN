@@ -29,6 +29,8 @@ int mod(int a, int b); // Pythonic modulus
 
 int roundToNearestInteger(double x);
 
+double shift(const CornerData<double>& func, const std::vector<Halfedge>& curve);
+
 FaceData<double> round(const CornerData<double>& f, const std::vector<Halfedge>& curve);
 
 /* Get min and max of a vector, ignoring NaNs. */
@@ -65,8 +67,6 @@ void readLines(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surfa
 void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<SurfacePoint>& curveNodes,
                 std::vector<std::array<size_t, 2>>& curveEdges, std::vector<std::array<Face, 2>>& dualChain,
                 int offset = -1);
-
-// TODO: write output scalar functions
 
 /* Input curves are already assumed to have been organized into connected components. */
 void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
@@ -110,6 +110,9 @@ std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& cur
 std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
 getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
                                        double epsilon = 1e-2);
+
+std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
+getIsocontours(const CornerData<double>& func);
 
 
 // ===================== MESH MUTATION

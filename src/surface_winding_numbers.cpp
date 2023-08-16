@@ -25,7 +25,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     //  - store an arbitrary outgoing cut halfedge per interior vertex
     //  - curve endpoints and their signs.
     std::map<Vertex, Halfedge> outgoingHalfedgeOnCurve;
-    // TODO: Did I handle chain edges on the boundary yet?
     std::vector<std::pair<Vertex, bool>> endpoints;
     geom.requireVertexIndices();
     geom.requireEdgeIndices();
@@ -75,7 +74,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const Vector<double>& chai
     vFunction = CornerData<double>(mesh, 0);
     gFunction = EdgeData<double>(mesh, 0);
     if (!simplyConnected && doHomologyCorrection) {
-        std::cerr << "Doing homology correction..." << std::endl;
+        if (verbose) std::cerr << "Doing curve decomposition..." << std::endl;
         Vector<double> gamma = DarbouxDerivative(isInteriorEndpoint, wFunction);
         if (!isCurveClosed) gamma = harmonicComponent(gamma);
         CornerData<double> v =
@@ -122,8 +121,52 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::arr
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<SurfacePoint>& curveNodes,
                                                       const std::vector<std::array<size_t, 2>>& curveEdges) {
 
-    // TODO: Call Poisson solver
-    return CornerData<double>(mesh, 0);
+    // LHS
+    geom.requireCrouzeixRaviartLaplacian();
+    SparseMatrix<double>& L = geom.crouzeixRaviartLaplacian;
+    geom.unrequireCrouzeixRaviartLaplacian();
+
+    // RHS
+    geom.requireFaceAreas();
+    geom.requireEdgeIndices();
+    Vector<double> RHS = Vector<double>::Zero(mesh.nEdges());
+    for (const auto& seg : curveEdges) {
+        BarycentricVector seg(curveNodes[seg[0]], curveNodes[seg[1]]);
+        discretizeSegmentInCrouzeixRaviartBasis(seg, RHS);
+    }
+    geom.unrequireFaceAreas();
+
+    // solve
+    Vector<double> u = solvePositiveDefinite(L, RHS);
+    CornerData<double> uCorners(mesh);
+    for (Corner c : mesh.corners()) {
+        Halfedge heA = c.halfedge();
+        Halfedge heB = heA.next().next();
+        double valA = u[geom.edgeIndices[heA.edge()]];
+        double valB = u[geom.edgeIndices[heB.edge()]];
+        uCorners[c] = 0.5 * (valA + valB);
+    }
+    geom.unrequireEdgeIndices();
+
+    // VertexData<double> w(mesh, 0);
+    // for (Vertex v : mesh.vertices()) {
+    //     for (Edge e : v.adjacentEdges()) {
+    //         w[v] += u[geom.edgeIndices[e]];
+    //     }
+    //     w[v] /= v.degree();
+    // }
+
+    // CornerData<double> uCorners(mesh);
+    // geom.requireVertexIndices();
+    // for (Vertex v : mesh.vertices()) {
+    //     size_t vIdx = geom.vertexIndices[v];
+    //     for (Corner c : v.adjacentCorners()) {
+    //         uCorners[c] = u[vIdx];
+    //     }
+    // }
+    // geom.unrequireVertexIndices();
+    uFunction = uCorners;
+    return uCorners;
 }
 
 
@@ -350,12 +393,12 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     size_t numVars = F + E; // DOFs + slack variables
 
     // Set up environment
-    std::cerr << "Setting up Gurobi environment..." << std::endl;
+    if (verbose) std::cerr << "Setting up Gurobi environment..." << std::endl;
     GRBEnv env = GRBEnv();
     GRBModel model = GRBModel(env);
 
     // Allocate variables
-    std::cerr << "Allocating variables and setting up objective..." << std::endl;
+    if (verbose) std::cerr << "Allocating variables and setting up objective..." << std::endl;
     std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
     for (size_t i = 0; i < F; i++) {
@@ -370,7 +413,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 
     // Set up constraints
-    std::cerr << "Setting up constraints..." << std::endl;
+    if (verbose) std::cerr << "Setting up constraints..." << std::endl;
     geom.requireFaceIndices();
     for (size_t i = 0; i < E; i++) {
         // Compute the difference in face values across edge i
@@ -394,7 +437,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     }
     geom.unrequireFaceIndices();
 
-    std::cerr << "Solving..." << std::endl;
+    if (verbose) std::cerr << "Solving..." << std::endl;
     try {
         model.optimize();
         int optimstatus = model.get(GRB_IntAttr_Status);
@@ -431,12 +474,12 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
                                                          const Vector<double>& gamma) const {
 
     // Complete curve using a shortest-path heuristic.
-    std::cerr << "Completing curve..." << std::endl;
+    if (verbose) std::cerr << "Completing curve..." << std::endl;
     Vector<double> chain = dijkstraCompleteCurve(inputChain, endpoints);
 
     // Detect connected components.
     // In the same loop, integrate gamma within each connected component.
-    std::cerr << "Determining connected components..." << std::endl;
+    if (verbose) std::cerr << "Determining connected components..." << std::endl;
     double eps = 1e-5;
     int regionLabel = 0;
     FaceData<int> visitedFace(mesh, 0);
@@ -488,7 +531,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     polyscope::getSurfaceMesh("input mesh")->addFaceScalarQuantity("connected components", visitedFace);
     polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v pre-shift", vInit);
 
-    std::cerr << "Re-indexing edges..." << std::endl;
+    if (verbose) std::cerr << "Re-indexing edges..." << std::endl;
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
     std::vector<Edge> bEdges;
     size_t reIdx = 0;
@@ -505,12 +548,12 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
 
     // Run reduced-size LP, where [# of DOFs] = [# of connected components].
     size_t numVars = nComponents + reIdx; // DOFs + slack variables
-    std::cerr << "Setting up Gurobi environment..." << std::endl;
+    if (verbose) std::cerr << "Setting up Gurobi environment..." << std::endl;
     GRBEnv env = GRBEnv();
     GRBModel model = GRBModel(env);
 
     // Allocate variables
-    std::cerr << "Allocating variables and setting up objective..." << std::endl;
+    if (verbose) std::cerr << "Allocating variables and setting up objective..." << std::endl;
     std::vector<GRBVar> X(numVars);
     geom.requireEdgeLengths();
     for (size_t i = 0; i < nComponents; i++) {
@@ -523,7 +566,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
 
     // Set up constraints
-    std::cerr << "Setting up constraints..." << std::endl;
+    if (verbose) std::cerr << "Setting up constraints..." << std::endl;
     geom.requireFaceIndices();
     for (size_t i = 0; i < reIdx; i++) {
         Edge e = bEdges[i];
@@ -543,7 +586,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     }
     geom.unrequireFaceIndices();
 
-    std::cerr << "Solving..." << std::endl;
+    if (verbose) std::cerr << "Solving..." << std::endl;
     try {
         model.optimize();
         int optimstatus = model.get(GRB_IntAttr_Status);
@@ -746,6 +789,42 @@ CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
 }
 
 
+// ==== POISSON FORMULATION
+
+
+void SurfaceWindingNumbersSolver::discretizeSegmentInCrouzeixRaviartBasis(const BarycentricVector& seg,
+                                                                          Vector<double>& RHS) {
+
+    std::vector<Face> faces;
+    switch (seg.type) {
+        case BarycentricVectorType::Face:
+            faces.push_back(seg.face);
+            break;
+        case BarycentricVectorType::Edge:
+            for (Face f : seg.edge.adjacentFaces()) {
+                faces.push_back(f);
+            }
+            break;
+        default:
+            return;
+            break;
+    }
+    if (faces.size() == 0) return; // shouldn't get here except for numerical error reasons maybe
+    double split = 1. / faces.size();
+
+    for (const Face& f : faces) {
+        double A = geom.faceAreas[f];
+        for (Halfedge he : f.adjacentHalfedges()) {
+            size_t eIdx = geom.edgeIndices[he.edge()];
+            // Evaluate the inner product between this segment and the halfedge vector.
+            Vector2 edgeCoords = he.orientation() ? Vector2{-1., 1.} : Vector2{1., -1.};
+            BarycentricVector heVec = BarycentricVector(he.edge(), edgeCoords);
+            RHS[eIdx] += split * dot(geom, seg, heVec) / A;
+        }
+    }
+}
+
+
 // ==== AUXILIARY FUNCTIONS
 
 
@@ -854,7 +933,7 @@ SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterf
     if (!mesh.isTriangular()) throw std::logic_error("Mesh must be triangular to run SWN.");
 
     // DEC operators
-    // TODO: mollify hodge1 weights / halfedgeCotanWeights?
+    // TODO: mollify hodge1 weights / halfedgeCotanWeights
     geom.requireDECOperators();
     d0 = geom.d0;
     d0T = d0.transpose();

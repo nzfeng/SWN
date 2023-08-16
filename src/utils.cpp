@@ -31,10 +31,9 @@ std::tuple<double, double> minMax(const Vector<double>& vec) {
     return std::make_tuple(minVal, maxVal);
 }
 
-/* Implement the rounding procedure described in Section 3.5.1. */
-FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedge>& curve) {
+/* Compute the global shift (part of the rounding procedure) described in Section 3.5.1. */
+double shift(const CornerData<double>& func, const std::vector<Halfedge>& curve) {
 
-    // Compute global shift.
     SurfaceMesh* mesh = func.getMesh();
     Vector<int> chain = convertToChain(*mesh, curve);
     double avgShiftOnOneSide = 0.;
@@ -54,6 +53,14 @@ FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedg
         }
     }
     avgShiftOnOneSide = nValidJumps == 0 ? 0 : avgShiftOnOneSide / nValidJumps;
+    return avgShiftOnOneSide;
+}
+
+/* Implement the rounding procedure described in Section 3.5.1. */
+FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedge>& curve) {
+
+    // Compute global shift.
+    double avgShiftOnOneSide = shift(func, curve);
 
     // Threshold on a per-face basis
     FaceData<double> F(*mesh);
@@ -276,8 +283,6 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
         std::cerr << "Could not open file <" << filepath << ">" << std::endl;
     }
 }
-
-// TODO: texture exporting
 
 void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
                        const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename) {
@@ -554,6 +559,8 @@ std::vector<std::vector<Halfedge>> getCurveComponents(IntrinsicGeometryInterface
 /*
  * Same as getCurveComponents(), but for when the curve is not constrained to mesh edges and is given as a series of
  * SurfacePoints.
+ *
+ * Warning: This function assumes that curve nodes have the same index iff they have the same position.
  */
 std::vector<std::vector<std::array<size_t, 2>>>
 getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNodes,
@@ -695,6 +702,22 @@ getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedg
     std::vector<std::array<size_t, 2>> contourEdges;
     // TODO
     return std::make_tuple(contourNodes, contourEdges);
+}
+
+/* Contour the input at integer values. */
+std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
+getIsocontours(const CornerData<double>& func) {
+
+    Vector<double> fVec = func.toVector();
+    double minVal = fVec.minCoeff();
+    double maxVal = fVec.maxCoeff();
+
+    std::vector<SurfacePoint> nodes;
+    std::vector<std::array<size_t, 2>> edges;
+
+    // TODO: de-duplicate nodes
+
+    return std::make_tuple(nodes, edges);
 }
 
 // ===================== MESH MUTATION

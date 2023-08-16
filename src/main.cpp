@@ -36,6 +36,7 @@ std::unique_ptr<SurfaceWindingNumbersSolver> intrinsicSolver;
 bool ALLOW_REMESHING = true;
 bool DO_HOMOLOGY_CORRECTION = true;
 bool APPROXIMATE_RESIDUAL = false;
+bool VERBOSE = false;
 std::string OUTPUT_FILENAME;
 float EPSILON = 1e-2;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
@@ -450,18 +451,32 @@ void exportCurves(int curveExportMode) {
                     break;
                 }
                 case (CurveMode::BARYCENTRIC): {
-                    // TODO: CURVE_NODES, CURVE_EDGES
+                    // CURVE_NODES, CURVE_EDGES
                     switch (curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
+                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
+                                         "mesh edges. No curves exported."
+                                      << std::endl;
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
+                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
+                                         "mesh edges. No curves exported."
+                                      << std::endl;
                             break;
                         }
                         case (CurveExportMode::CLOSED_ALL): {
+                            // TODO: Contour function
+                            std::vector<SurfacePoint> nodes;
+                            std::vector<std::array<size_t, 2>> edges;
+                            std::tie(nodes, edges) = getIsocontours(SWNSolver->uFunction);
+                            std::vector<std::vector<std::array<size_t, 2>>> edges = getCurveComponents(*);
                             break;
                         }
                         case (CurveExportMode::DECOMPOSITION): {
+                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
+                                         "mesh edges. No curves exported."
+                                      << std::endl;
                             break;
                         }
                     }
@@ -514,21 +529,6 @@ void exportCurves(int curveExportMode) {
             break;
         }
     }
-
-    // switch (curveExportMode) {
-    //     case (CurveExportMode::CLOSED_BOUNDING): {
-    //         filename = DATA_DIR + "BoundingLoops.obj";
-    //         break;
-    //     }
-    //     case (CurveExportMode::CLOSED_NONBOUNDING): {
-    //         filename = DATA_DIR + "NonBoundingLoops.obj";
-    //         break;
-    //     }
-    //     case (CurveExportMode::CLOSED_ALL): {
-    //         filename = DATA_DIR + "CompletedCurve.obj";
-    //         break;
-    //     }
-    // }
 }
 
 void solve() {
@@ -538,23 +538,24 @@ void solve() {
             if (USING_GUI) displayCurves(getGeom(), getCurveHalfedges(), CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
             SWNSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
             SWNSolver->approximateResidual = APPROXIMATE_RESIDUAL;
+            SWNSolver->verbose = VERBOSE;
             SWNSolver->epsilon = EPSILON;
             LAST_SOLVE.solverMode = SolverMode::ExtrinsicMesh;
             CornerData<double> w;
             if (DUAL_CHAIN.size() > 0) {
-                std::cerr << "m2" << std::endl;
+                if (VERBOSE) std::cerr << "Solving with a dual 1-chain..." << std::endl;
                 w = SWNSolver->solve(DUAL_CHAIN);
                 LAST_SOLVE.curveMode = CurveMode::DUAL;
             } else if (!USING_MANIFOLD_MESH && curveHalfedges.size() > 0) {
-                std::cerr << "m3" << std::endl;
+                if (VERBOSE) std::cerr << "Solving with a primal 1-chain..." << std::endl;
                 w = SWNSolver->solve(curveHalfedges);
                 LAST_SOLVE.curveMode = CurveMode::PRIMAL;
             } else if (USING_MANIFOLD_MESH && curveHalfedgesOnManifold.size() > 0) {
-                std::cerr << "m4" << std::endl;
+                if (VERBOSE) std::cerr << "Solving using a primal 1-chain..." << std::endl;
                 w = SWNSolver->solve(curveHalfedgesOnManifold);
                 LAST_SOLVE.curveMode = CurveMode::PRIMAL_MANIFOLD;
             } else {
-                std::cerr << "m5" << std::endl;
+                if (VERBOSE) std::cerr << "Solving using barycentric points (no curve decomposition)..." << std::endl;
                 w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
                 LAST_SOLVE.curveMode = CurveMode::BARYCENTRIC;
             }
@@ -580,6 +581,7 @@ void solve() {
             resetCurveOnIntrinsicTriangulation();
             intrinsicSolver->doHomologyCorrection = DO_HOMOLOGY_CORRECTION;
             intrinsicSolver->approximateResidual = APPROXIMATE_RESIDUAL;
+            intrinsicSolver->verbose = VERBOSE;
             intrinsicSolver->epsilon = EPSILON;
             LAST_SOLVE.solverMode = SolverMode::IntrinsicMesh;
             CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
@@ -665,6 +667,7 @@ void functionCallback() {
             ImGui::TreePop();
         }
         if (ImGui::TreeNode("Curves")) {
+            // ImGui::Checkbox("Allow contours not constrained to mesh edges", &ALLOW_CONTOURS);
             if (ImGui::Button("Export input curves")) {
                 std::vector<std::vector<std::array<size_t, 2>>> connectedComponents =
                     getCurveComponents(*mesh, CURVE_NODES, CURVE_EDGES);
@@ -696,14 +699,19 @@ int main(int argc, char** argv) {
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::Positional<std::string> inputFilename(parser, "mesh", "A mesh file.");
     args::ValueFlag<std::string> curveFilename(parser, "curve", "An input curve file", {"curve", "c"});
-    args::ValueFlag<std::string> allowRemeshing(parser, "allowRemeshing", "Allow re-meshing of the input mesh.",
-                                                {"allowRemeshing", "m"});
+
     args::ValueFlag<std::string> outputFilename(parser, "outputFilename", "File to save output mesh to.",
                                                 {"outputFilename", "o"});
-    args::ValueFlag<std::string> doHomologyCorrection(parser, "identifyNonbounding", "", {"identifyNonbounding", "h"});
-    args::ValueFlag<std::string> approximateResidual(parser, "approximateResidual", "", {"approximateResidual", "r"});
 
     args::Group group(parser);
+    args::Flag noRemeshing(group, "noRemeshing", "Don't allow re-meshing of the input mesh.", {"noRemeshing", "nM"});
+    args::Flag noDecomposition(group, "noDecomposition",
+                               "Don't decompose the curve & identify nonbounding curve components.",
+                               {"noDecomposition", "nD"});
+    args::Flag approximateResidual(group, "approximateResidual", "Use reduced-size linear program.",
+                                   {"approximateResidual", "r"});
+    args::Flag headless(group, "headless", "Don't use the GUI.", {"headless", "h"});
+    args::Flag verbose(group, "verbose", "Verbose output.", {"verbose", "V"});
 
     // Parse args
     try {
@@ -718,7 +726,8 @@ int main(int argc, char** argv) {
     }
 
     if (!inputFilename) {
-        std::cerr << "Please specify a mesh file as argument" << std::endl;
+        std::cerr << "Please specify a mesh file as argument. Accepted mesh file formats are obj, ply, off, or stl."
+                  << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -735,17 +744,21 @@ int main(int argc, char** argv) {
         std::string CURVE_FILEPATH = args::get(curveFilename);
         readCurves(*mesh, CURVE_FILEPATH, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
     }
-    if (allowRemeshing) {
-        ALLOW_REMESHING = isStringTrue(args::get(allowRemeshing));
-    }
     if (outputFilename) {
         OUTPUT_FILENAME = args::get(outputFilename);
     }
-    if (doHomologyCorrection) {
-        DO_HOMOLOGY_CORRECTION = isStringTrue(args::get(doHomologyCorrection));
+    // Read flags.
+    if (noRemeshing) {
+        ALLOW_REMESHING = false;
+    }
+    if (noDecomposition) {
+        DO_HOMOLOGY_CORRECTION = false;
     }
     if (approximateResidual) {
-        APPROXIMATE_RESIDUAL = isStringTrue(args::get(approximateResidual));
+        APPROXIMATE_RESIDUAL = true;
+    }
+    if (headless) {
+        USING_GUI = false;
     }
 
     // Initialize solver.
