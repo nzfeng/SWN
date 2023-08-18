@@ -335,29 +335,9 @@ void exportCurves(const VertexData<Vector3>& vertexPositions, const std::vector<
     exportCurves(vertexPositions, curveNodes, curveEdges, filename);
 }
 
-/*
- * Convert scalar data on corners to texture coordinates, taking into account the "special interpolation" at curve
- * endpoints.
- */
-CornerData<Vector2> cornerDataToTexCoords(const CornerData<double>& u) {
-
-    SurfaceMesh* mesh = u.getMesh();
-    CornerData<Vector2> texCoords(*mesh);
-    for (Face f : mesh->faces()) {
-        for (Corner c : f.adjacentCorners()) {
-            if (std::isnan(u[c])) {
-                texCoords[c] = {0., 0.};
-            } else {
-                texCoords[c] = {u[c], 1.};
-            }
-        }
-    }
-    return texCoords;
-}
-
 void exportFunction(EmbeddedGeometryInterface& geom, const CornerData<double>& u, const std::string& filename) {
 
-    CornerData<Vector2> texCoords = cornerDataToTexCoords(u);
+    CornerData<Vector2> texCoords = toProjectiveCoordinates(u);
     WavefrontOBJ::write(filename, geom, texCoords);
     std::cerr << "File " << filename << " written." << std::endl;
 }
@@ -366,13 +346,14 @@ void exportFunction(EmbeddedGeometryInterface& geom, const CornerData<double>& u
 void exportFunction(IntegerCoordinatesIntrinsicTriangulation& intTri, VertexPositionGeometry& manifoldGeom,
                     const CornerData<double>& u, const std::string& filename) {
 
-    CornerData<Vector2> texCoords = cornerDataToTexCoords(u);
+    CornerData<Vector2> texCoords = toProjectiveCoordinates(u);
 
     CommonSubdivision& cs = intTri.getCommonSubdivision();
     cs.constructMesh(true, true);
 
     // Interpolate homogenous coordinates from intrinsic mesh to the common subdivision
     CornerData<Vector2> cs_u = interpolateVector2AcrossB(cs, texCoords);
+    cs_u = toProjectiveCoordinates(fromProjectiveCoordinates(cs_u));
 
     // Export mesh
     ManifoldSurfaceMesh& csMesh = *cs.mesh;

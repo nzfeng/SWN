@@ -1,4 +1,4 @@
-# Winding Numbers on Discrete Surfaces
+# (Discrete) Surface Winding Numbers
 
 **Note:** I'm still adding better support for non-orientable meshes. But all the core functionality has been implemented!
 
@@ -39,6 +39,8 @@ The program relies on Gurobi to solve a linear program, so you must first instal
 
 To get CMake to find your Gurobi installation, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`.
 
+![screenshot of FindGUROBI.cmake file](media/GurobiCmake.png)
+
 ## Running the program
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
@@ -46,7 +48,7 @@ cd SWN
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j8 # or however many cores you want to use
-bin/main /path/to/mesh [--c=/optional/path/to/curve]
+bin/main /path/to/mesh --c=/path/to/curve
 ```
 A Polyscope GUI will open.
 
@@ -101,7 +103,7 @@ The GUI can perform intrinsic re-meshing for better numerical behavior. If you c
 
 Notes: 
 * Only manifold meshes can be intrinsically re-triangulated.
-* Delaunay refinement may not terminate with a minimum angle value >30 degrees. If this happens, I recommend picking an angle value of 25-28 degrees.
+* Delaunay refinement may not terminate with a minimum angle value >30 degrees. If this happens, I recommend picking an angle value of 25-28 degrees. Other times you may need to start with an even lower angle threshold, and gradually increase.
 
 # Output
 
@@ -119,4 +121,4 @@ When you export a solution, we output texture coordinates for the mesh in _homog
 
 The `render/` directory contains an example Blender file (`Example.blend`) that can load and visualize meshes and curves, with the SWN solution. The Blender file should open to a Python script in the `Scripting` workspace. You can load your own mesh & solution (encoded as texture coordinates) by changing the mesh filepath in the script and clicking on `Run Script`. This will load your model and visualize the correctly-interpolated solution.
 
-![Screenshot of the provided Blender file](media/BlenderFile.png)
+![Screenshot of the provided Blender file](media/Blender.png)

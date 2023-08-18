@@ -115,6 +115,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<Halfedge
 CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::array<Face, 2>>& curve) {
 
     // TODO
+    std::cerr << "Sorry, dual formulation hasn't been implemented yet!" << std::endl;
     return CornerData<double>(mesh, 0);
 }
 

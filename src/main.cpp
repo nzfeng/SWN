@@ -45,6 +45,7 @@ int MAX_INSERTIONS = -1;
 bool USING_MANIFOLD_MESH = false; // if using the re-meshed (manifold) mesh
 bool USE_SPECIAL_BASES = true;
 int MAX_EDGE_SPLITS = 3;
+float THRESHOLD = 1e-1;
 
 // == program parameters
 std::string MESHNAME = "input mesh";
@@ -377,14 +378,14 @@ void exportCurves(int curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
                             if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops =
-                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
+                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
                             exportCurves(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
                             if (SWNSolver->vFunction.getMesh() == nullptr) break;
-                            std::vector<Halfedge> loops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
+                            std::vector<Halfedge> loops = getJumpLocus(curveHalfedges, SWNSolver->vFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
                             exportCurves(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                             break;
@@ -392,9 +393,10 @@ void exportCurves(int curveExportMode) {
                         case (CurveExportMode::CLOSED_ALL): {
                             if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bLoops =
-                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
+                                getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction, THRESHOLD);
                             if (SWNSolver->vFunction.getMesh() == nullptr) break;
-                            std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
+                            std::vector<Halfedge> nbLoops =
+                                getJumpLocus(curveHalfedges, SWNSolver->vFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, bLoops);
                             std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nbLoops);
                             components.insert(components.end(), nbCpts.begin(), nbCpts.end());
@@ -421,14 +423,15 @@ void exportCurves(int curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
                             if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops =
-                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
+                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, loops);
                             exportCurves(manifoldGeom->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
                             if (SWNSolver->vFunction.getMesh() == nullptr) break;
-                            std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
+                            std::vector<Halfedge> loops =
+                                getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, loops);
                             exportCurves(manifoldGeom->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                             break;
@@ -436,10 +439,10 @@ void exportCurves(int curveExportMode) {
                         case (CurveExportMode::CLOSED_ALL): {
                             if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bLoops =
-                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
+                                getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction, THRESHOLD);
                             if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> nbLoops =
-                                getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
+                                getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction, THRESHOLD);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, bLoops);
                             std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*manifoldGeom, nbLoops);
                             components.insert(components.end(), nbCpts.begin(), nbCpts.end());
@@ -473,14 +476,15 @@ void exportCurves(int curveExportMode) {
                 case (CurveExportMode::CLOSED_BOUNDING): {
                     if (intrinsicSolver->wFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> loops =
-                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
+                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction, THRESHOLD);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
                     exportCurves(vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                     break;
                 }
                 case (CurveExportMode::CLOSED_NONBOUNDING): {
                     if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
-                    std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
+                    std::vector<Halfedge> loops =
+                        getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction, THRESHOLD);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
                     exportCurves(vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                     break;
@@ -488,9 +492,10 @@ void exportCurves(int curveExportMode) {
                 case (CurveExportMode::CLOSED_ALL): {
                     if (intrinsicSolver->wFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> bLoops =
-                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
+                        getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction, THRESHOLD);
                     if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
-                    std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
+                    std::vector<Halfedge> nbLoops =
+                        getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction, THRESHOLD);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, bLoops);
                     std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*intTri, nbLoops);
                     components.insert(components.end(), nbCpts.begin(), nbCpts.end());
@@ -755,11 +760,13 @@ void functionCallback() {
             ImGui::TreePop();
         }
         if (ImGui::TreeNode("Curves")) {
+
             if (ImGui::Button("Export input curves")) {
                 std::vector<std::vector<std::array<size_t, 2>>> connectedComponents =
                     getCurveComponents(*mesh, CURVE_NODES, CURVE_EDGES);
                 exportCurves(geometry->vertexPositions, CURVE_NODES, connectedComponents, DATA_DIR + "InputCurves.obj");
             }
+            ImGui::InputFloat("Threshold", &THRESHOLD);
             if (ImGui::Button("Export completed bounding loops")) {
                 exportCurves(CurveExportMode::CLOSED_BOUNDING);
             }
@@ -769,7 +776,7 @@ void functionCallback() {
             if (ImGui::Button("Export all completed curves")) {
                 exportCurves(CurveExportMode::CLOSED_ALL);
             }
-            if (ImGui::Button("Export curve decomposition (bounding + nonbounding parts")) {
+            if (ImGui::Button("Export curve decomposition (bounding + nonbounding parts)")) {
                 exportCurves(CurveExportMode::DECOMPOSITION);
             }
             ImGui::TreePop();

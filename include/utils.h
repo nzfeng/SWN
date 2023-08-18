@@ -100,16 +100,16 @@ getCurveComponents(SurfaceMesh& mesh, const std::vector<SurfacePoint>& curveNode
 
 std::tuple<std::vector<Halfedge>, std::vector<Halfedge>>
 getCurveDecomposition(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& vFunc,
-                      double epsilon = 1e-2);
+                      double epsilon = 1e-1);
 
 std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const FaceData<double>& func,
-                                   double epsilon = 1e-2);
+                                   double epsilon = 1e-1);
 
 std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& func,
-                                   double epsilon = 1e-2);
+                                   double epsilon = 1e-1);
 
 std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges,
-                                                const CornerData<double>& func, double epsilon = 1e-2);
+                                                const CornerData<double>& func, double epsilon = 1e-1);
 
 
 // ===================== MESH MUTATION
