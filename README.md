@@ -1,10 +1,12 @@
 # Winding Numbers on Discrete Surfaces
 
-**WARNING:** This repo is still under construction! The full code release will be soon; the core functionality is already implemented, but I'm currently adding better support for exporting + testing.
+**Note:** I'm still adding better support for non-orientable meshes. But all the core functionality has been implemented!
 
 C++ demo for "[Winding Numbers on Discrete Surfaces](https://nzfeng.github.io/research/WNoDS/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html), [Mark Gillespie](https://markjgillespie.com/), and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2023.
 
 Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
+
+Project page with links to paper, pseudocode, supplementals, & videos: [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
 SIGGRAPH talk (10 minutes): [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
@@ -93,7 +95,7 @@ Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the p
 
 ## Intrinsic re-meshing
 
-The GUI can perform intrinsic re-meshing for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export the solution on the [_common subdivision_](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/). See [this page](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/) mesh.
+The GUI can perform intrinsic re-meshing for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export the solution on the [_common subdivision_](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/) mesh.
 
 ![screenshot of an intrinsically-remeshed mesh](media/IntrinsicRemesh.png)
 
@@ -115,8 +117,6 @@ When you export a solution, we output texture coordinates for the mesh in _homog
 
 ## Visualization
 
-The `render/` directory contains an example Blender file (`Example.blend`) that can load and visualize meshes and curves, with the SWN solution. 
-
-<!-- The blender file should open to a Python script in the `Scripting` workspace. You can load your own uniformized mesh by changing the mesh name in the script and clicking on `Run Script`. This will load your model and apply a correctly-interpolated checkerboard texture. -->
+The `render/` directory contains an example Blender file (`Example.blend`) that can load and visualize meshes and curves, with the SWN solution. The Blender file should open to a Python script in the `Scripting` workspace. You can load your own mesh & solution (encoded as texture coordinates) by changing the mesh filepath in the script and clicking on `Run Script`. This will load your model and visualize the correctly-interpolated solution.
 
 ![Screenshot of the provided Blender file](media/BlenderFile.png)
