@@ -1,6 +1,7 @@
 # Build directories
 build/
 **/build/
+*.blend1
 
 # Editor and OS things
 .DS_Store

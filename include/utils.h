@@ -36,8 +36,6 @@ FaceData<double> round(const CornerData<double>& f, const std::vector<Halfedge>&
 /* Get min and max of a vector, ignoring NaNs. */
 std::tuple<double, double> minMax(const Vector<double>& vec);
 
-/* TODO: Normalize values to lie between 0 and 1. */
-
 // ===================== OPERATORS
 
 template <typename T>
@@ -69,11 +67,17 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
                 int offset = -1);
 
 /* Input curves are already assumed to have been organized into connected components. */
-void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
-                       const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename);
+void exportCurves(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
+                  const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename);
 
-void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions,
-                       const std::vector<std::vector<Halfedge>>& curveHalfedges, const std::string& filename);
+void exportCurves(const VertexData<Vector3>& vertexPositions, const std::vector<std::vector<Halfedge>>& curveHalfedges,
+                  const std::string& filename);
+
+void exportFunction(EmbeddedGeometryInterface& geom, const CornerData<double>& u, const std::string& filename);
+
+/* Export on common subdivision. */
+void exportFunction(IntegerCoordinatesIntrinsicTriangulation& intTri, VertexPositionGeometry& manifoldGeom,
+                    const CornerData<double>& u, const std::string& filename);
 
 // ===================== CURVE MANIPULATION
 
@@ -106,13 +110,6 @@ std::vector<Halfedge> getJumpLocus(const std::vector<Halfedge>& curveHalfedges, 
 
 std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& curveHalfedges,
                                                 const CornerData<double>& func, double epsilon = 1e-2);
-
-std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
-                                       double epsilon = 1e-2);
-
-std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getIsocontours(const CornerData<double>& func);
 
 
 // ===================== MESH MUTATION

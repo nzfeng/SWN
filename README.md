@@ -6,7 +6,7 @@ C++ demo for "[Winding Numbers on Discrete Surfaces](https://nzfeng.github.io/re
 
 Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
 
-Talk (10 minutes): [link]()
+SIGGRAPH talk (10 minutes): [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
 ![teaser image](media/teaser.png)
 
@@ -33,7 +33,7 @@ If this code contributes to academic work, please cite as:
 # Getting started
 
 ## Gurobi
-The program relies on Gurobi to solve linear programs, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
+The program relies on Gurobi to solve a linear program, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
 
 To get CMake to find your Gurobi installation, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`.
 
@@ -41,64 +41,61 @@ To get CMake to find your Gurobi installation, you may need to change the path i
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
 cd SWN
-mkdir build
-cd build
+mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-make -j8 # or however many cores you have or want to use
-bin/main /path/to/mesh --c=/path/to/curve --v
+make -j8 # or however many cores you want to use
+bin/main /path/to/mesh [--c=/optional/path/to/curve]
 ```
-
-A Polyscope GUI will open:
-
-![Screenshot of Polyscope GUI](media/GUI.png)
+A Polyscope GUI will open.
 
 # Usage
 
-You can pass several solve options to the command line, options which are also shown in the GUI:
-
-|argument | purpose|
-| ------------- |-------------|
-|`--c`, `--curve=input.[obj,txt]`| Filepath to input curve. |
-|`--o`, `--outputFilename=output.obj`| File to save output mesh to, along with homogeneous texture coordinates. |
+You can pass several arguments to the command line, including some flags which are also shown in the GUI:
 
 |flag | purpose|
 | ------------- |-------------|
-|`--nM`, `--noRemeshing`| Disallow the input surface mesh from being re-meshed. Remeshing is allowed by default. |
-|`--nD`, `--noDecomposition`| Don't decompose the curve & identify nonbounding curve components. Curve decomposition is on by default. |
+|`--c`, `--curve=input.txt`| Filepath to input curve. |
+|`--o`, `--output=output.obj`| File to save winding number function to, consisting of the mesh along with homogeneous texture coordinates. |
 |`--r`, `--approximateResidual`| Use reduced-size linear program to approximate the residual function, instead of solving a more expensive LP. Off by default. |
 |`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.|
 |`--V`, `--verbose`| Verbose output. |
 |`--h`, `--help`| Display help |
 
-TODO: CL flags for all output?
-
-## Curve input
-TODO
-
 ## File formats
 The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-central website](https://geometry-central.net/surface/utilities/io/#reading-meshes) for up-to-date information on supported file types.
 
-The input curve can be specified either as a discrete _1-chain_ or a _dual 1-chain_. Specifying the curve as a 1-chain encodes the curve with _tangential orientation_, while a dual 1-chain encodes _normal orientation_. Using a dual 1-chain is only necessary if the surface is non-orientable.
+## Curve input
+The curve may either be specified within the mesh file, or in a separate file which can be passed as a second command line argument.
 
-<!-- Ordinarily, we assume that jumps increase in the direction obtained by rotating the tangent 90 degrees counter-clockwise. On
-a nonorientable surface, however, there is no consistent notion of counter-clockwise—even though curves can still meaningfully bound regions -->
+If the curve is specified within the mesh file, the curve can be specified as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). A line is specified by the character `l` followed by two or more vertex indices, which indicates that the curve includes an oriented edge between each pair of adjacent vertices. The curve can also be specified as a _dual 1-chain_, using the character `c` followed by two or more faces indices, which indicates that the curve jumps by +1 between each pair of adjacent faces. Using a dual 1-chain is only necessary if the surface is non-orientable.
+
+If the curve is specified within a separate file, the curve can be specified using barycentric points along the surface. A barycentric point may either be of type "vertex" and specified in the form
+```
+v [vertex index]
+```
+or of type "edge",
+```
+e [edge index] [barycentric coordinate between 0 and 1]
+```
+Edges of the curve are specified by the character `l` followed by two or more indices of barycentric points -- where barycentric points are indexed according to their line order in the file -- indicating that the curve includes an oriented edge between each pair of adjacent barycentric points. Element indices and indices of barycentric points are by default 1-indexed following OBJ convention, but one may also include the directive `#offset 0` to use 0-indexing. See e.g. `data/annulus.txt` or `data/bunny-heart.txt` for examples of this file format. 
+
+If some parts of the curve are not constrained to mesh edges, the mesh will be cut such that the curve conforms to the new, mutated mesh (but the curve geometry itself will remain unchanged.) The caveat is that the curve must initially be continuous and linear within each triangle face.
 
 ## Re-meshing
 
 Depending on the curve input, the surface may need to be re-meshed for optimal output.
 
-First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If `--allowRemeshing=true`, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.) If `--allowRemeshing=false`, the program will use a Poisson formulation of SWN to give valid output, but I currently have no algorithm for identifying nonbounding curve components.
+First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If this is the case, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.)
 
-Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. If `--allowRemeshing=true`, such edges will be subdivided so that these parts of the curve will not be ignored.
+Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. Such edges will be subdivided so that these parts of the curve will not be ignored.
 
 ## Intrinsic re-meshing
 
-The GUI can perform intrinsic re-meshing, for example generating an intrinsic Delaunay triangulation for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export TODO
+The GUI can perform intrinsic re-meshing for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export the solution on the [_common subdivision_](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/). See [this page](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/) mesh.
 
 Notes: 
 * Only manifold meshes can be intrinsically re-triangulated.
 * Delaunay refinement may not terminate with a minimum angle value >30 degrees. If this happens, I recommend picking an angle value of 25-28 degrees.
-* Input curves must be constrained to mesh edges, and specified as primal 1-chains.
 
 # Output
 

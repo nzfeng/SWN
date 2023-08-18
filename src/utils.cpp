@@ -63,6 +63,7 @@ FaceData<double> round(const CornerData<double>& func, const std::vector<Halfedg
     double avgShiftOnOneSide = shift(func, curve);
 
     // Threshold on a per-face basis
+    SurfaceMesh* mesh = func.getMesh();
     FaceData<double> F(*mesh);
     for (Face f : mesh->faces()) {
         double avgVal = 0.;
@@ -139,7 +140,7 @@ CornerData<double> fromProjectiveCoordinates(const CornerData<Vector2>& u_hom) {
 
 std::string getHomeDirectory(const std::string& filepath) {
 
-    std::string dir(filepath.begin(), filepath.begin() + filepath.find_last_of("/"));
+    std::string dir(filepath.begin(), filepath.begin() + filepath.find_last_of("/") + 1);
     return dir;
 }
 
@@ -284,8 +285,8 @@ void readCurves(SurfaceMesh& mesh, const std::string& filepath, std::vector<Surf
     }
 }
 
-void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
-                       const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename) {
+void exportCurves(const VertexData<Vector3>& vertexPositions, const std::vector<SurfacePoint>& curveNodes,
+                  const std::vector<std::vector<std::array<size_t, 2>>>& curveEdges, const std::string& filename) {
 
     std::fstream f;
     f.open(filename, std::ios::out | std::ios::trunc);
@@ -316,8 +317,8 @@ void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions, const std::ve
     }
 }
 
-void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions,
-                       const std::vector<std::vector<Halfedge>>& curveHalfedges, const std::string& filename) {
+void exportCurves(const VertexData<Vector3>& vertexPositions, const std::vector<std::vector<Halfedge>>& curveHalfedges,
+                  const std::string& filename) {
 
     std::vector<SurfacePoint> curveNodes;
     std::vector<std::vector<std::array<size_t, 2>>> curveEdges;
@@ -331,7 +332,54 @@ void exportCurvesAsOBJ(const VertexData<Vector3>& vertexPositions,
             currCurve.push_back({N - 2, N - 1});
         }
     }
-    exportCurvesAsOBJ(vertexPositions, curveNodes, curveEdges, filename);
+    exportCurves(vertexPositions, curveNodes, curveEdges, filename);
+}
+
+/*
+ * Convert scalar data on corners to texture coordinates, taking into account the "special interpolation" at curve
+ * endpoints.
+ */
+CornerData<Vector2> cornerDataToTexCoords(const CornerData<double>& u) {
+
+    SurfaceMesh* mesh = u.getMesh();
+    CornerData<Vector2> texCoords(*mesh);
+    for (Face f : mesh->faces()) {
+        for (Corner c : f.adjacentCorners()) {
+            if (std::isnan(u[c])) {
+                texCoords[c] = {0., 0.};
+            } else {
+                texCoords[c] = {u[c], 1.};
+            }
+        }
+    }
+    return texCoords;
+}
+
+void exportFunction(EmbeddedGeometryInterface& geom, const CornerData<double>& u, const std::string& filename) {
+
+    CornerData<Vector2> texCoords = cornerDataToTexCoords(u);
+    WavefrontOBJ::write(filename, geom, texCoords);
+    std::cerr << "File " << filename << " written." << std::endl;
+}
+
+/* Export on common subdivision. */
+void exportFunction(IntegerCoordinatesIntrinsicTriangulation& intTri, VertexPositionGeometry& manifoldGeom,
+                    const CornerData<double>& u, const std::string& filename) {
+
+    CornerData<Vector2> texCoords = cornerDataToTexCoords(u);
+
+    CommonSubdivision& cs = intTri.getCommonSubdivision();
+    cs.constructMesh(true, true);
+
+    // Interpolate homogenous coordinates from intrinsic mesh to the common subdivision
+    CornerData<Vector2> cs_u = interpolateVector2AcrossB(cs, texCoords);
+
+    // Export mesh
+    ManifoldSurfaceMesh& csMesh = *cs.mesh;
+    VertexData<Vector3> csPositions = cs.interpolateAcrossA(manifoldGeom.vertexPositions);
+    VertexPositionGeometry geom(csMesh, csPositions);
+    writeSurfaceMesh(csMesh, geom, cs_u, filename);
+    std::cerr << "File " << filename << " written." << std::endl;
 }
 
 
@@ -691,33 +739,6 @@ std::vector<Halfedge> getCompletedBoundingLoops(const std::vector<Halfedge>& cur
     // Apply rounding procedure.
     FaceData<double> W = round(func, curveHalfedges);
     return getJumpLocus(curveHalfedges, W, epsilon);
-}
-
-/* Contour the input, but just extract the isocontour (don't snap to mesh edges.) */
-std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getCompletedBoundingLoopsAsBarycentric(const std::vector<Halfedge>& curveHalfedges, const CornerData<double>& wFunc,
-                                       double epsilon) {
-
-    std::vector<SurfacePoint> contourNodes;
-    std::vector<std::array<size_t, 2>> contourEdges;
-    // TODO
-    return std::make_tuple(contourNodes, contourEdges);
-}
-
-/* Contour the input at integer values. */
-std::tuple<std::vector<SurfacePoint>, std::vector<std::array<size_t, 2>>>
-getIsocontours(const CornerData<double>& func) {
-
-    Vector<double> fVec = func.toVector();
-    double minVal = fVec.minCoeff();
-    double maxVal = fVec.maxCoeff();
-
-    std::vector<SurfacePoint> nodes;
-    std::vector<std::array<size_t, 2>> edges;
-
-    // TODO: de-duplicate nodes
-
-    return std::make_tuple(nodes, edges);
 }
 
 // ===================== MESH MUTATION

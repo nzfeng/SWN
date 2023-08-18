@@ -60,12 +60,6 @@ class SurfaceWindingNumbersSolver {
      * to un-ambiguously specify the curve's sides and orientations on non-manifold or non-orientable meshes. */
     CornerData<double> solve(const std::vector<std::array<Face, 2>>& curve);
 
-    /* Curve(s) is specified as an unordered collection of edges between barycentric points on the mesh.
-     * The jump Laplace equation is solved using a Poisson formulation, but homology correction is no longer done.
-     */
-    CornerData<double> solve(const std::vector<SurfacePoint>& curveNodes,
-                             const std::vector<std::array<size_t, 2>>& curveEdges);
-
     // === Parameters
     double epsilon = 1e-2;
     bool doHomologyCorrection = true;
@@ -131,10 +125,6 @@ class SurfaceWindingNumbersSolver {
                                               const VertexData<bool>& isInteriorEndpoint,
                                               const std::map<Vertex, Halfedge>& outgoingHalfedgeOnCurve,
                                               const CornerData<double>& resid) const;
-
-    // === Poisson formulation
-
-    void discretizeSegmentInCrouzeixRaviartBasis(const BarycentricVector& seg, Vector<double>& RHS);
 
     // === Auxiliary functions
 

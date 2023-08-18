@@ -118,57 +118,6 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::arr
     return CornerData<double>(mesh, 0);
 }
 
-CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<SurfacePoint>& curveNodes,
-                                                      const std::vector<std::array<size_t, 2>>& curveEdges) {
-
-    // LHS
-    geom.requireCrouzeixRaviartLaplacian();
-    SparseMatrix<double>& L = geom.crouzeixRaviartLaplacian;
-    geom.unrequireCrouzeixRaviartLaplacian();
-
-    // RHS
-    geom.requireFaceAreas();
-    geom.requireEdgeIndices();
-    Vector<double> RHS = Vector<double>::Zero(mesh.nEdges());
-    for (const auto& seg : curveEdges) {
-        BarycentricVector seg(curveNodes[seg[0]], curveNodes[seg[1]]);
-        discretizeSegmentInCrouzeixRaviartBasis(seg, RHS);
-    }
-    geom.unrequireFaceAreas();
-
-    // solve
-    Vector<double> u = solvePositiveDefinite(L, RHS);
-    CornerData<double> uCorners(mesh);
-    for (Corner c : mesh.corners()) {
-        Halfedge heA = c.halfedge();
-        Halfedge heB = heA.next().next();
-        double valA = u[geom.edgeIndices[heA.edge()]];
-        double valB = u[geom.edgeIndices[heB.edge()]];
-        uCorners[c] = 0.5 * (valA + valB);
-    }
-    geom.unrequireEdgeIndices();
-
-    // VertexData<double> w(mesh, 0);
-    // for (Vertex v : mesh.vertices()) {
-    //     for (Edge e : v.adjacentEdges()) {
-    //         w[v] += u[geom.edgeIndices[e]];
-    //     }
-    //     w[v] /= v.degree();
-    // }
-
-    // CornerData<double> uCorners(mesh);
-    // geom.requireVertexIndices();
-    // for (Vertex v : mesh.vertices()) {
-    //     size_t vIdx = geom.vertexIndices[v];
-    //     for (Corner c : v.adjacentCorners()) {
-    //         uCorners[c] = u[vIdx];
-    //     }
-    // }
-    // geom.unrequireVertexIndices();
-    uFunction = uCorners;
-    return uCorners;
-}
-
 
 // ==== ALGORITHM STEPS
 
@@ -786,42 +735,6 @@ CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
     }
     geom.unrequireEdgeIndices();
     return reducedCoordinates;
-}
-
-
-// ==== POISSON FORMULATION
-
-
-void SurfaceWindingNumbersSolver::discretizeSegmentInCrouzeixRaviartBasis(const BarycentricVector& seg,
-                                                                          Vector<double>& RHS) {
-
-    std::vector<Face> faces;
-    switch (seg.type) {
-        case BarycentricVectorType::Face:
-            faces.push_back(seg.face);
-            break;
-        case BarycentricVectorType::Edge:
-            for (Face f : seg.edge.adjacentFaces()) {
-                faces.push_back(f);
-            }
-            break;
-        default:
-            return;
-            break;
-    }
-    if (faces.size() == 0) return; // shouldn't get here except for numerical error reasons maybe
-    double split = 1. / faces.size();
-
-    for (const Face& f : faces) {
-        double A = geom.faceAreas[f];
-        for (Halfedge he : f.adjacentHalfedges()) {
-            size_t eIdx = geom.edgeIndices[he.edge()];
-            // Evaluate the inner product between this segment and the halfedge vector.
-            Vector2 edgeCoords = he.orientation() ? Vector2{-1., 1.} : Vector2{1., -1.};
-            BarycentricVector heVec = BarycentricVector(he.edge(), edgeCoords);
-            RHS[eIdx] += split * dot(geom, seg, heVec) / A;
-        }
-    }
 }
 
 

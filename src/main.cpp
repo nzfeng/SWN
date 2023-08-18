@@ -37,7 +37,7 @@ bool ALLOW_REMESHING = true;
 bool DO_HOMOLOGY_CORRECTION = true;
 bool APPROXIMATE_RESIDUAL = false;
 bool VERBOSE = false;
-std::string OUTPUT_FILENAME;
+std::string OUTPUT_FILENAME = "";
 float EPSILON = 1e-2;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
 float REFINE_ANGLE_THRESH = 25.;
@@ -54,7 +54,7 @@ int SOLVER_MODE = SolverMode::ExtrinsicMesh;
 bool VIS_INTRINSIC_MESH = false;
 bool USING_GUI = true;
 enum CurveExportMode { CLOSED_BOUNDING = 0, CLOSED_NONBOUNDING, CLOSED_ALL, DECOMPOSITION };
-enum CurveMode { DUAL = 0, PRIMAL, PRIMAL_MANIFOLD, BARYCENTRIC };
+enum CurveMode { DUAL = 0, DUAL_MANIFOLD, PRIMAL, PRIMAL_MANIFOLD };
 struct SolverState {
     int solverMode;
     int curveMode;
@@ -68,10 +68,6 @@ std::vector<std::array<Face, 2>> DUAL_CHAIN;
 std::vector<Halfedge> curveHalfedges;
 std::vector<Halfedge> curveHalfedgesOnManifold;
 std::vector<Halfedge> curveHalfedgesOnIntrinsic;
-
-// == intermediate data
-std::vector<SurfacePoint> CONTOUR_NODES;
-std::vector<std::array<size_t, 2>> CONTOUR_EDGES;
 
 
 SurfaceMesh& getMesh() {
@@ -371,40 +367,49 @@ void exportCurves(int curveExportMode) {
                     // TODO: DUAL_CHAIN
                     break;
                 }
+                case (CurveMode::DUAL_MANIFOLD): {
+                    // TODO: DUAL_CHAIN
+                    break;
+                }
                 case (CurveMode::PRIMAL): {
                     // curveHalfedges
                     switch (curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
+                            if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops =
                                 getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
+                            exportCurves(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
+                            exportCurves(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_ALL): {
+                            if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bLoops =
                                 getCompletedBoundingLoops(curveHalfedges, SWNSolver->wFunction);
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedges, SWNSolver->vFunction);
                             std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, bLoops);
                             std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nbLoops);
                             components.insert(components.end(), nbCpts.begin(), nbCpts.end());
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
+                            exportCurves(geometry->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
                             break;
                         }
                         case (CurveExportMode::DECOMPOSITION): {
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bounding, nonbounding;
                             std::tie(bounding, nonbounding) =
                                 getCurveDecomposition(curveHalfedges, SWNSolver->vFunction);
                             std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*geometry, bounding);
                             std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nonbounding);
-                            exportCurvesAsOBJ(geometry->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
-                            exportCurvesAsOBJ(geometry->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
+                            exportCurves(geometry->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                            exportCurves(geometry->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
                             break;
                         }
                     }
@@ -414,69 +419,42 @@ void exportCurves(int curveExportMode) {
                     // curveHalfedgesOnManifold
                     switch (curveExportMode) {
                         case (CurveExportMode::CLOSED_BOUNDING): {
+                            if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops =
                                 getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
-                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, loops);
+                            exportCurves(manifoldGeom->vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_NONBOUNDING): {
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
-                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, loops);
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, loops);
+                            exportCurves(manifoldGeom->vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                             break;
                         }
                         case (CurveExportMode::CLOSED_ALL): {
+                            if (SWNSolver->wFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bLoops =
                                 getCompletedBoundingLoops(curveHalfedgesOnManifold, SWNSolver->wFunction);
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> nbLoops =
                                 getJumpLocus(curveHalfedgesOnManifold, SWNSolver->vFunction);
-                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*geometry, bLoops);
-                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nbLoops);
+                            std::vector<std::vector<Halfedge>> components = getCurveComponents(*manifoldGeom, bLoops);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*manifoldGeom, nbLoops);
                             components.insert(components.end(), nbCpts.begin(), nbCpts.end());
-                            exportCurvesAsOBJ(geometry->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
+                            exportCurves(manifoldGeom->vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
                             break;
                         }
                         case (CurveExportMode::DECOMPOSITION): {
+                            if (SWNSolver->vFunction.getMesh() == nullptr) break;
                             std::vector<Halfedge> bounding, nonbounding;
                             std::tie(bounding, nonbounding) =
                                 getCurveDecomposition(curveHalfedgesOnManifold, SWNSolver->vFunction);
-                            std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*geometry, bounding);
-                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*geometry, nonbounding);
-                            exportCurvesAsOBJ(geometry->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
-                            exportCurvesAsOBJ(geometry->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
-                            break;
-                        }
-                    }
-                    break;
-                }
-                case (CurveMode::BARYCENTRIC): {
-                    // CURVE_NODES, CURVE_EDGES
-                    switch (curveExportMode) {
-                        case (CurveExportMode::CLOSED_BOUNDING): {
-                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
-                                         "mesh edges. No curves exported."
-                                      << std::endl;
-                            break;
-                        }
-                        case (CurveExportMode::CLOSED_NONBOUNDING): {
-                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
-                                         "mesh edges. No curves exported."
-                                      << std::endl;
-                            break;
-                        }
-                        case (CurveExportMode::CLOSED_ALL): {
-                            // TODO: Contour function
-                            std::vector<SurfacePoint> nodes;
-                            std::vector<std::array<size_t, 2>> edges;
-                            std::tie(nodes, edges) = getIsocontours(SWNSolver->uFunction);
-                            std::vector<std::vector<std::array<size_t, 2>>> edges = getCurveComponents(*);
-                            break;
-                        }
-                        case (CurveExportMode::DECOMPOSITION): {
-                            std::cerr << "Sorry, curve decomposition is not implemented for curves not constrained to "
-                                         "mesh edges. No curves exported."
-                                      << std::endl;
+                            std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*manifoldGeom, bounding);
+                            std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*manifoldGeom, nonbounding);
+                            exportCurves(manifoldGeom->vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                            exportCurves(manifoldGeom->vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
                             break;
                         }
                     }
@@ -493,36 +471,41 @@ void exportCurves(int curveExportMode) {
             }
             switch (curveExportMode) {
                 case (CurveExportMode::CLOSED_BOUNDING): {
+                    if (intrinsicSolver->wFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> loops =
                         getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
-                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
+                    exportCurves(vertexPositions, components, DATA_DIR + "BoundingLoops.obj");
                     break;
                 }
                 case (CurveExportMode::CLOSED_NONBOUNDING): {
+                    if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> loops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, loops);
-                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
+                    exportCurves(vertexPositions, components, DATA_DIR + "NonBoundingLoops.obj");
                     break;
                 }
                 case (CurveExportMode::CLOSED_ALL): {
+                    if (intrinsicSolver->wFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> bLoops =
                         getCompletedBoundingLoops(curveHalfedgesOnIntrinsic, intrinsicSolver->wFunction);
+                    if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> nbLoops = getJumpLocus(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
                     std::vector<std::vector<Halfedge>> components = getCurveComponents(*intTri, bLoops);
                     std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*intTri, nbLoops);
                     components.insert(components.end(), nbCpts.begin(), nbCpts.end());
-                    exportCurvesAsOBJ(vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
+                    exportCurves(vertexPositions, components, DATA_DIR + "CompletedCurve.obj");
                     break;
                 }
                 case (CurveExportMode::DECOMPOSITION): {
+                    if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
                     std::vector<Halfedge> bounding, nonbounding;
                     std::tie(bounding, nonbounding) =
                         getCurveDecomposition(curveHalfedgesOnIntrinsic, intrinsicSolver->vFunction);
                     std::vector<std::vector<Halfedge>> bCpts = getCurveComponents(*intTri, bounding);
                     std::vector<std::vector<Halfedge>> nbCpts = getCurveComponents(*intTri, nonbounding);
-                    exportCurvesAsOBJ(vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
-                    exportCurvesAsOBJ(vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
+                    exportCurves(vertexPositions, bCpts, DATA_DIR + "BoundingParts.obj");
+                    exportCurves(vertexPositions, nbCpts, DATA_DIR + "NonBoundingParts.obj");
                     break;
                 }
             }
@@ -545,19 +528,18 @@ void solve() {
             if (DUAL_CHAIN.size() > 0) {
                 if (VERBOSE) std::cerr << "Solving with a dual 1-chain..." << std::endl;
                 w = SWNSolver->solve(DUAL_CHAIN);
-                LAST_SOLVE.curveMode = CurveMode::DUAL;
+                LAST_SOLVE.curveMode = !USING_MANIFOLD_MESH ? CurveMode::DUAL : CurveMode::DUAL_MANIFOLD;
+                if (OUTPUT_FILENAME != "") exportFunction(getGeom(), w, OUTPUT_FILENAME);
             } else if (!USING_MANIFOLD_MESH && curveHalfedges.size() > 0) {
                 if (VERBOSE) std::cerr << "Solving with a primal 1-chain..." << std::endl;
                 w = SWNSolver->solve(curveHalfedges);
                 LAST_SOLVE.curveMode = CurveMode::PRIMAL;
+                if (OUTPUT_FILENAME != "") exportFunction(getGeom(), w, OUTPUT_FILENAME);
             } else if (USING_MANIFOLD_MESH && curveHalfedgesOnManifold.size() > 0) {
                 if (VERBOSE) std::cerr << "Solving using a primal 1-chain..." << std::endl;
                 w = SWNSolver->solve(curveHalfedgesOnManifold);
                 LAST_SOLVE.curveMode = CurveMode::PRIMAL_MANIFOLD;
-            } else {
-                if (VERBOSE) std::cerr << "Solving using barycentric points (no curve decomposition)..." << std::endl;
-                w = SWNSolver->solve(CURVE_NODES, CURVE_EDGES);
-                LAST_SOLVE.curveMode = CurveMode::BARYCENTRIC;
+                if (OUTPUT_FILENAME != "") exportFunction(getGeom(), w, OUTPUT_FILENAME);
             }
             if (USING_GUI) {
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
@@ -585,12 +567,12 @@ void solve() {
             intrinsicSolver->epsilon = EPSILON;
             LAST_SOLVE.solverMode = SolverMode::IntrinsicMesh;
             CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
+            if (OUTPUT_FILENAME != "") exportFunction(*intTri, *manifoldGeom, w, OUTPUT_FILENAME);
             if (USING_GUI) {
                 visualizeIntrinsicSolution(intrinsicSolver->uFunction, "u");
                 visualizeIntrinsicSolution(intrinsicSolver->vFunction, "v", false);
                 visualizeIntrinsicSolution(w, "w", false);
                 psMesh->setEnabled(false);
-                // transferBtoA(intTri, f_intrinsic, TransferMethod::L2);
                 Vector<double> wVector = w.toVector();
                 Vector<double> uVector = intrinsicSolver->uFunction.toVector();
                 Vector<double> vVector = intrinsicSolver->vFunction.toVector();
@@ -655,24 +637,128 @@ void functionCallback() {
 
     if (ImGui::TreeNode("Export")) {
         if (ImGui::TreeNode("Functions")) {
+            // These somewhat redundant if-branches could be cleaned up with some array+indexing, but whatever
             if (ImGui::Button("Export winding number function")) {
-                // TODO
+                switch (LAST_SOLVE.solverMode) {
+                    case (SolverMode::ExtrinsicMesh): {
+                        if (SWNSolver->wFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*geometry, SWNSolver->wFunction, DATA_DIR + MESHROOT + "_w.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*manifoldGeom, SWNSolver->wFunction, DATA_DIR + MESHROOT + "_w.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case (SolverMode::IntrinsicMesh): {
+                        if (intrinsicSolver->wFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->wFunction,
+                                               DATA_DIR + MESHROOT + "_w.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->wFunction,
+                                               DATA_DIR + MESHROOT + "_w.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
-            if (ImGui::Button("Export initial jump harmonic function u")) {
-                // TODO
+            if (ImGui::Button("Export jump harmonic function u")) {
+                switch (LAST_SOLVE.solverMode) {
+                    case (SolverMode::ExtrinsicMesh): {
+                        if (SWNSolver->uFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*geometry, SWNSolver->uFunction, DATA_DIR + MESHROOT + "_u.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*manifoldGeom, SWNSolver->uFunction, DATA_DIR + MESHROOT + "_u.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case (SolverMode::IntrinsicMesh): {
+                        if (intrinsicSolver->uFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->uFunction,
+                                               DATA_DIR + MESHROOT + "_u.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->uFunction,
+                                               DATA_DIR + MESHROOT + "_u.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
             if (ImGui::Button("Export residual function v")) {
-                // if (SOLVER_MODE == SolverMode::ExtrinsicMesh && SWNSolver->vFunction.getMesh() != nullptr)
+                switch (LAST_SOLVE.solverMode) {
+                    case (SolverMode::ExtrinsicMesh): {
+                        if (SWNSolver->vFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*geometry, SWNSolver->vFunction, DATA_DIR + MESHROOT + "_v.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*manifoldGeom, SWNSolver->vFunction, DATA_DIR + MESHROOT + "_v.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case (SolverMode::IntrinsicMesh): {
+                        if (intrinsicSolver->vFunction.getMesh() == nullptr) break;
+                        switch (LAST_SOLVE.curveMode) {
+                            case (CurveMode::DUAL):
+                            case (CurveMode::PRIMAL): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->vFunction,
+                                               DATA_DIR + MESHROOT + "_v.obj");
+                                break;
+                            }
+                            case (CurveMode::DUAL_MANIFOLD):
+                            case (CurveMode::PRIMAL_MANIFOLD): {
+                                exportFunction(*intTri, *manifoldGeom, intrinsicSolver->vFunction,
+                                               DATA_DIR + MESHROOT + "_v.obj");
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
             ImGui::TreePop();
         }
         if (ImGui::TreeNode("Curves")) {
-            // ImGui::Checkbox("Allow contours not constrained to mesh edges", &ALLOW_CONTOURS);
             if (ImGui::Button("Export input curves")) {
                 std::vector<std::vector<std::array<size_t, 2>>> connectedComponents =
                     getCurveComponents(*mesh, CURVE_NODES, CURVE_EDGES);
-                exportCurvesAsOBJ(geometry->vertexPositions, CURVE_NODES, connectedComponents,
-                                  DATA_DIR + "InputCurves.obj");
+                exportCurves(geometry->vertexPositions, CURVE_NODES, connectedComponents, DATA_DIR + "InputCurves.obj");
             }
             if (ImGui::Button("Export completed bounding loops")) {
                 exportCurves(CurveExportMode::CLOSED_BOUNDING);
@@ -699,15 +785,9 @@ int main(int argc, char** argv) {
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::Positional<std::string> inputFilename(parser, "mesh", "A mesh file.");
     args::ValueFlag<std::string> curveFilename(parser, "curve", "An input curve file", {"curve", "c"});
-
-    args::ValueFlag<std::string> outputFilename(parser, "outputFilename", "File to save output mesh to.",
-                                                {"outputFilename", "o"});
+    args::ValueFlag<std::string> outputFilename(parser, "output", "Output file", {"output", "o"});
 
     args::Group group(parser);
-    args::Flag noRemeshing(group, "noRemeshing", "Don't allow re-meshing of the input mesh.", {"noRemeshing", "nM"});
-    args::Flag noDecomposition(group, "noDecomposition",
-                               "Don't decompose the curve & identify nonbounding curve components.",
-                               {"noDecomposition", "nD"});
     args::Flag approximateResidual(group, "approximateResidual", "Use reduced-size linear program.",
                                    {"approximateResidual", "r"});
     args::Flag headless(group, "headless", "Don't use the GUI.", {"headless", "h"});
@@ -734,7 +814,6 @@ int main(int argc, char** argv) {
     // Load mesh
     MESH_FILEPATH = args::get(inputFilename);
     DATA_DIR = getHomeDirectory(MESH_FILEPATH); // extract home directory
-    OUTPUT_FILENAME = DATA_DIR + "output.obj";
     std::tie(mesh, geometry) = readSurfaceMesh(MESH_FILEPATH);
     // Read line objects, if they exist in mesh file.
     readLines(*mesh, MESH_FILEPATH, CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
@@ -748,18 +827,13 @@ int main(int argc, char** argv) {
         OUTPUT_FILENAME = args::get(outputFilename);
     }
     // Read flags.
-    if (noRemeshing) {
-        ALLOW_REMESHING = false;
-    }
-    if (noDecomposition) {
-        DO_HOMOLOGY_CORRECTION = false;
-    }
     if (approximateResidual) {
         APPROXIMATE_RESIDUAL = true;
     }
     if (headless) {
         USING_GUI = false;
     }
+    MESHROOT = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
 
     // Initialize solver.
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
@@ -787,7 +861,6 @@ int main(int argc, char** argv) {
         polyscope::state::userCallback = functionCallback;
 
         // Register the mesh with polyscope
-        MESHROOT = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
         psMesh =
             polyscope::registerSurfaceMesh(MESHNAME, getGeom().inputVertexPositions, getMesh().getFaceVertexList());
         psMesh->setAllPermutations(polyscopePermutations(getMesh()));
