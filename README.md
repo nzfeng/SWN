@@ -8,7 +8,7 @@ Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
 
 SIGGRAPH talk (10 minutes): [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
-![teaser image](media/teaser.png)
+![teaser image](media/GUI.png)
 
 If this code contributes to academic work, please cite as:
 ```bibtex
@@ -61,6 +61,8 @@ You can pass several arguments to the command line, including some flags which a
 |`--V`, `--verbose`| Verbose output. |
 |`--h`, `--help`| Display help |
 
+<!-- TODO: Expose all parameters -->
+
 ## File formats
 The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-central website](https://geometry-central.net/surface/utilities/io/#reading-meshes) for up-to-date information on supported file types.
 
@@ -93,6 +95,8 @@ Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the p
 
 The GUI can perform intrinsic re-meshing for better numerical behavior. If you choose to solve on an intrinsic mesh, exporting the solution will export the solution on the [_common subdivision_](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/). See [this page](https://geometry-central.net/surface/intrinsic_triangulations/common_subdivision/) mesh.
 
+![screenshot of an intrinsically-remeshed mesh](media/IntrinsicRemesh.png)
+
 Notes: 
 * Only manifold meshes can be intrinsically re-triangulated.
 * Delaunay refinement may not terminate with a minimum angle value >30 degrees. If this happens, I recommend picking an angle value of 25-28 degrees.
@@ -116,4 +120,3 @@ The `render/` directory contains an example Blender file (`Example.blend`) that 
 <!-- The blender file should open to a Python script in the `Scripting` workspace. You can load your own uniformized mesh by changing the mesh name in the script and clicking on `Run Script`. This will load your model and apply a correctly-interpolated checkerboard texture. -->
 
 ![Screenshot of the provided Blender file](media/BlenderFile.png)
-TODO: example Blender file
