@@ -8,7 +8,7 @@ Project page with links to paper, pseudocode, supplementals, & videos: [link](ht
 
 SIGGRAPH talk (10 minutes): [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
-![teaser image](media/GUI.png)
+![teaser image](media/GUI_DoubleTorus.png)
 
 If this code contributes to academic work, please cite as:
 ```bibtex
