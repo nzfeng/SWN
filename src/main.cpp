@@ -357,6 +357,7 @@ void visualizeIntrinsicSolution(const CornerData<double>& w, const std::string& 
         psCsMesh->setEnabled(true);
     }
     psCsMesh->addCornerScalarQuantity(name, cs_w)->setEnabled(true);
+    psCsMesh->addFaceScalarQuantity("round(w)", cs.copyFromB(round(w, curveHalfedgesOnIntrinsic)))->setEnabled(false);
 }
 
 void exportCurves(int curveExportMode) {
@@ -548,6 +549,7 @@ void solve() {
             }
             if (USING_GUI) {
                 psMesh->addCornerScalarQuantity("w", w)->setEnabled(true);
+                psMesh->addFaceScalarQuantity("round(w)", round(w, getCurveHalfedges()))->setEnabled(false);
                 psMesh->addCornerScalarQuantity("u", SWNSolver->uFunction)->setEnabled(false);
                 psMesh->addCornerScalarQuantity("v", SWNSolver->vFunction)->setEnabled(false);
                 Vector<double> wVector = w.toVector();
@@ -606,8 +608,9 @@ void functionCallback() {
 
     // Solve on original mesh;
     ImGui::RadioButton("Extrinsic mesh", &SOLVER_MODE, SolverMode::ExtrinsicMesh);
-    // Solve on an intrinsic mesh
-    ImGui::RadioButton("Intrinsic mesh", &SOLVER_MODE, SolverMode::IntrinsicMesh);
+    if (mesh->isManifold()) { // Solve on an intrinsic mesh
+        ImGui::RadioButton("Intrinsic mesh", &SOLVER_MODE, SolverMode::IntrinsicMesh);
+    }
 
     if (ImGui::TreeNode("Advanced solving options")) {
         ImGui::Checkbox("Solve for nonbounding loops", &DO_HOMOLOGY_CORRECTION);
@@ -616,28 +619,30 @@ void functionCallback() {
         ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Intrinsic mesh improvement")) {
-        if (ImGui::Checkbox("Show intrinsic edges", &VIS_INTRINSIC_MESH)) {
-            ensureHaveIntrinsicTriangulation();
-            visualizeIntrinsicEdges();
-        }
+    if (mesh->isManifold()) {
+        if (ImGui::TreeNode("Intrinsic mesh improvement")) {
+            if (ImGui::Checkbox("Show intrinsic edges", &VIS_INTRINSIC_MESH)) {
+                ensureHaveIntrinsicTriangulation();
+                visualizeIntrinsicEdges();
+            }
 
-        if (ImGui::Button("Flip to Delaunay")) {
-            ensureHaveIntrinsicTriangulation();
-            intTri->flipToDelaunay();
-            visualizeIntrinsicEdges();
-        }
+            if (ImGui::Button("Flip to Delaunay")) {
+                ensureHaveIntrinsicTriangulation();
+                intTri->flipToDelaunay();
+                visualizeIntrinsicEdges();
+            }
 
-        ImGui::InputFloat("Angle thresh", &REFINE_ANGLE_THRESH);
-        ImGui::InputFloat("Area thresh", &REFINE_AREA_THRESH);
-        ImGui::InputInt("Max insert", &MAX_INSERTIONS);
-        if (ImGui::Button("Delaunay refine")) {
-            ensureHaveIntrinsicTriangulation();
-            intTri->delaunayRefine(REFINE_ANGLE_THRESH, REFINE_AREA_THRESH, MAX_INSERTIONS);
-            visualizeIntrinsicEdges();
-        }
+            ImGui::InputFloat("Angle thresh", &REFINE_ANGLE_THRESH);
+            ImGui::InputFloat("Area thresh", &REFINE_AREA_THRESH);
+            ImGui::InputInt("Max insert", &MAX_INSERTIONS);
+            if (ImGui::Button("Delaunay refine")) {
+                ensureHaveIntrinsicTriangulation();
+                intTri->delaunayRefine(REFINE_ANGLE_THRESH, REFINE_AREA_THRESH, MAX_INSERTIONS);
+                visualizeIntrinsicEdges();
+            }
 
-        ImGui::TreePop();
+            ImGui::TreePop();
+        }
     }
 
     if (ImGui::TreeNode("Export")) {
@@ -789,7 +794,7 @@ int main(int argc, char** argv) {
 
     // Configure the argument parser
     args::ArgumentParser parser("Solve for surface winding number on a triangle mesh.");
-    args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
+    args::HelpFlag help(parser, "help", "Display this help menu", {"help"});
     args::Positional<std::string> inputFilename(parser, "mesh", "A mesh file.");
     args::ValueFlag<std::string> curveFilename(parser, "curve", "An input curve file", {"curve", "c"});
     args::ValueFlag<std::string> outputFilename(parser, "output", "Output file", {"output", "o"});
@@ -844,6 +849,7 @@ int main(int argc, char** argv) {
 
     // Initialize solver.
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
+    if (VERBOSE) std::cerr << "Solver initialized" << std::endl;
 
     // Convert input curve to other forms, if applicable.
     if (CURVE_EDGES.size() > 0) {

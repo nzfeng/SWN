@@ -1,7 +1,5 @@
 # (Discrete) Surface Winding Numbers
 
-**Note:** I'm still adding better support for non-orientable meshes. But all the core functionality has been implemented!
-
 C++ demo for "[Winding Numbers on Discrete Surfaces](https://nzfeng.github.io/research/WNoDS/index.html)" by [Nicole Feng](https://nzfeng.github.io/index.html), [Mark Gillespie](https://markjgillespie.com/), and [Keenan Crane](https://www.cs.cmu.edu/~kmcrane/), presented at SIGGRAPH 2023.
 
 Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
@@ -54,16 +52,16 @@ A Polyscope GUI will open.
 
 # Usage
 
-You can pass several arguments to the command line, including some flags which are also shown in the GUI:
+You can pass several arguments to the command line, including some flags which are also shown in the GUI.
 
 |flag | purpose|
 | ------------- |-------------|
 |`--c`, `--curve=input.txt`| Filepath to input curve. |
-|`--o`, `--output=output.obj`| File to save winding number function to, consisting of the mesh along with homogeneous texture coordinates. |
+|`--o`, `--output=[meshname]_w.obj`| File to save winding number function to, consisting of the mesh along with homogeneous texture coordinates. |
 |`--r`, `--approximateResidual`| Use reduced-size linear program to approximate the residual function, instead of solving a more expensive LP. Off by default. |
-|`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.|
+<!-- |`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.| -->
 |`--V`, `--verbose`| Verbose output. |
-|`--h`, `--help`| Display help |
+|`--help`| Display help |
 
 <!-- TODO: Expose all parameters -->
 
@@ -73,7 +71,7 @@ The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-centra
 ## Curve input
 The curve may either be specified within the mesh file, or in a separate file which can be passed as a second command line argument.
 
-If the curve is specified within the mesh file, the curve can be specified as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). A line is specified by the character `l` followed by two or more vertex indices, which indicates that the curve includes an oriented edge between each pair of adjacent vertices. The curve can also be specified as a _dual 1-chain_, using the character `c` followed by two or more faces indices, which indicates that the curve jumps by +1 between each pair of adjacent faces. Using a dual 1-chain is only necessary if the surface is non-orientable.
+If the curve is specified within the mesh file, the curve can be specified as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). A line is specified by the character `l` followed by two or more vertex indices, which indicates that the curve includes an oriented edge between each pair of adjacent vertices. The curve can also be specified as a _dual 1-chain_, using the character `c` followed by two or more faces indices, which indicates that the curve jumps by +1 between each pair of adjacent faces. Using a dual 1-chain is usually not necessary; you might want to use a dual 1-chain only if the surface is non-orientable. **Note:** Since the dual version wasn't part of our original paper, supporting dual 1-chain input is still under construction at the moment.
 
 If the curve is specified within a separate file, the curve can be specified using barycentric points along the surface. A barycentric point may either be of type "vertex" and specified in the form
 ```

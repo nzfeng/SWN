@@ -178,10 +178,8 @@ SurfaceWindingNumbersSolver::solveJumpLaplaceEquation(const std::vector<Vertex>&
         }
     }
 
-    geom.requireHalfedgeCotanWeights();
     SparseMatrix<double> L = buildLaplacian(isInteriorEndpoint, DOFindex, nDOFs);
     Vector<double> b = buildJumpLaplaceRHS(interiorVertices, isInteriorEndpoint, reducedCoordinates, DOFindex, nDOFs);
-    geom.unrequireHalfedgeCotanWeights();
     shiftDiagonal(L, 1e-8); // hack to ensure L is PD and not just PSD
     Vector<double> u0 = solvePositiveDefinite(L, b);
 
@@ -251,7 +249,7 @@ SparseMatrix<double> SurfaceWindingNumbersSolver::buildLaplacian(const VertexDat
 
             size_t i = DOFindex[he.tailVertex()];
             size_t j = DOFindex[he.tipVertex()];
-            double w = geom.halfedgeCotanWeights[he];
+            double w = halfedgeCotanWeights[he];
             if (std::isnan(w) || !std::isfinite(w)) w = 1;
             tripletList.emplace_back(i, i, w);
             tripletList.emplace_back(j, j, w);
@@ -280,8 +278,8 @@ Vector<double> SurfaceWindingNumbersSolver::buildJumpLaplaceRHS(const std::vecto
         for (Halfedge he : v.outgoingHalfedges()) {
             Halfedge heB = he.next().next();
             double cumJump = reducedCoordinates[he.corner()];
-            double wA = geom.halfedgeCotanWeights[he];
-            double wB = geom.halfedgeCotanWeights[heB];
+            double wA = halfedgeCotanWeights[he];
+            double wB = halfedgeCotanWeights[heB];
             size_t vI = DOFindex[v];
             size_t vJ = DOFindex[he.tipVertex()];
             size_t vK = DOFindex[heB.tailVertex()];
@@ -478,8 +476,6 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
     }
     geom.unrequireEdgeIndices();
     int nComponents = regionLabel;
-    polyscope::getSurfaceMesh("input mesh")->addFaceScalarQuantity("connected components", visitedFace);
-    polyscope::getSurfaceMesh("input mesh")->addCornerScalarQuantity("v pre-shift", vInit);
 
     if (verbose) std::cerr << "Re-indexing edges..." << std::endl;
     EdgeData<size_t> bEdgeIdx(mesh, 0); // dense re-indexing of edges on component boundaries
@@ -751,23 +747,6 @@ CornerData<double> SurfaceWindingNumbersSolver::subtractJumpDerivative(
 void SurfaceWindingNumbersSolver::ensureHaveCoexactSolver() {
 
     if (coexactSolver == nullptr) {
-
-        // geom.requireEdgeIndices();
-        // geom.requireEdgeCotanWeights();
-        // const EdgeData<size_t>& eIdx = geom.edgeIndices;
-        // for (Edge e : mesh.edges()) {
-        //     double wInv = geom.edgeCotanWeights[e];
-        //     double w = 1. / wInv;
-        //     if (!std::isfinite(w) || std::isnan(w) || w < 0) {
-        //         w = 1;
-        //     } else if (w > 1000) {
-        //         w = 1000;
-        //     }
-        //     hodge1Inv.coeffRef(eIdx[e], eIdx[e]) = w;
-        // }
-        // geom.unrequireEdgeIndices();
-        // geom.unrequireEdgeCotanWeights();
-
         SparseMatrix<double> B = d1 * hodge1Inv * d1T;
         shiftDiagonal(B, 1e-8);
         coexactSolver.reset(new PositiveDefiniteSolver<double>(B));
@@ -846,16 +825,43 @@ SurfaceWindingNumbersSolver::SurfaceWindingNumbersSolver(IntrinsicGeometryInterf
 
     if (!mesh.isTriangular()) throw std::logic_error("Mesh must be triangular to run SWN.");
 
+    // Mollify halfedgeCotanWeights
+    geom.requireHalfedgeCotanWeights();
+    halfedgeCotanWeights = geom.halfedgeCotanWeights;
+    geom.unrequireHalfedgeCotanWeights();
+    for (Halfedge he : mesh.halfedges()) {
+        double w = halfedgeCotanWeights[he];
+        if (std::isnan(w) || !std::isfinite(w)) {
+            halfedgeCotanWeights[he] = 1;
+        } else if (w < 0.001) {
+            halfedgeCotanWeights[he] = 0.001;
+        } else if (w > 1000) {
+            halfedgeCotanWeights[he] = 1000;
+        }
+    }
+
     // DEC operators
-    // TODO: mollify hodge1 weights / halfedgeCotanWeights
     geom.requireDECOperators();
     d0 = geom.d0;
     d0T = d0.transpose();
-    hodge1 = geom.hodge1;
-    hodge1Inv = geom.hodge1Inverse;
     d1 = geom.d1;
     d1T = d1.transpose();
     geom.unrequireDECOperators();
+
+    hodge1.resize(mesh.nEdges(), mesh.nEdges());
+    hodge1Inv.resize(mesh.nEdges(), mesh.nEdges());
+    std::vector<Eigen::Triplet<double>> h1, h1Inv;
+    geom.requireEdgeIndices();
+    for (Edge e : mesh.edges()) {
+        size_t eIdx = geom.edgeIndices[e];
+        double w = 0;
+        for (Halfedge he : e.adjacentHalfedges()) w += halfedgeCotanWeights[he];
+        h1.emplace_back(eIdx, eIdx, w);
+        h1Inv.emplace_back(eIdx, eIdx, 1. / w);
+    }
+    geom.unrequireEdgeIndices();
+    hodge1Inv.setFromTriplets(h1Inv.begin(), h1Inv.end());
+    hodge1.setFromTriplets(h1.begin(), h1.end());
 
     // Create solvers
     ensureHaveCoexactSolver();

@@ -47,7 +47,7 @@ double shift(const CornerData<double>& func, const std::vector<Halfedge>& curve)
             if (isSpecial(func[cA]) || isSpecial(func[cB])) continue;
             double avg = 0.5 * (func[cA] + func[cB]);
             double avgInt = roundToNearestInteger(avg);
-            double shift = avgInt - avg;
+            double shift = abs(avgInt - avg);
             avgShiftOnOneSide += shift;
             nValidJumps += 1;
         }

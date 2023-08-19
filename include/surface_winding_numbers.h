@@ -76,6 +76,7 @@ class SurfaceWindingNumbersSolver {
     IntrinsicGeometryInterface& geom;
 
     bool simplyConnected;
+    HalfedgeData<double> halfedgeCotanWeights;
 
     // === Solvers
     // the 2-form Laplacian used to get co-exact component of a primal 1-form
