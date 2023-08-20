@@ -6,7 +6,7 @@ Paper PDF (4.4mb): [link](https://nzfeng.github.io/research/WNoDS/WNoDS.pdf)
 
 Project page with links to paper, pseudocode, supplementals, & videos: [link](https://nzfeng.github.io/research/WNoDS/index.html)
 
-SIGGRAPH talk (10 minutes): [link](https://nzfeng.github.io/research/WNoDS/index.html)
+SIGGRAPH talk (10 minutes): [link](https://youtu.be/QnMx3s4_4WY)
 
 ![teaser image](media/GUI_DoubleTorus.png)
 
