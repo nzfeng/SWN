@@ -91,7 +91,7 @@ Depending on the curve input, the surface may need to be re-meshed for optimal o
 
 First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If this is the case, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.)
 
-Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge will be ignored. Such edges will be subdivided so that these parts of the curve will not be ignored.
+Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge would be ignored. Therefore such edges are subdivided so that these parts of the curve will not be ignored.
 
 ## Intrinsic re-meshing
 
@@ -107,7 +107,7 @@ Notes:
 
 From the GUI menu, you can export the solution, as well as other intermediate functions, as an OBJ file containing both the mesh and texture coordinates. Whenever one calls an export function, the data that gets exported is from most recently computed solution.
 
-From the GUI menu, you can also export curves as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). In most 3D graphics software, how smooth a curve is rendered depends on its connectivity (i.e., there can be noticeable gaps between curves specified as separate segments.) Therefore, this program will automatically greedily compute the connected components of the curve before exporting, so that the curve can be written with maximum connectivity and hence yield maximum smoothness during rendering. I have included an example Blender file that loads in a mesh and curve, and renders the winding number function stored as texture coordinates on the mesh; see the section on "Visualization" below.
+From the GUI menu, you can also export curves as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). In most 3D graphics software, how smooth a curve is rendered depends on its connectivity (i.e., there can be noticeable gaps between curves specified as separate segments.) Therefore, this program will automatically greedily compute the connected components of the curve before exporting, so that the curve can be written with maximum connectivity and hence yield maximum smoothness during rendering. I have included an example Blender file that loads in a mesh, and renders the winding number function stored as texture coordinates on the mesh; see the section on "Visualization" below.
 
 ## Homogenous texture coordinates
 
