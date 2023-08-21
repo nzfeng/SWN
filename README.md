@@ -59,10 +59,10 @@ You can pass several arguments to the command line, including some flags which a
 |`--c`, `--curve=input.txt`| Filepath to input curve. |
 |`--o`, `--output=[meshname]_w.obj`| File to save winding number function to, consisting of the mesh along with homogeneous texture coordinates. |
 |`--r`, `--approximateResidual`| Use reduced-size linear program to approximate the residual function, instead of solving a more expensive LP. Off by default. |
-<!-- |`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.| -->
 |`--V`, `--verbose`| Verbose output. |
 |`--help`| Display help |
 
+<!-- |`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.| -->
 <!-- TODO: Expose all parameters -->
 
 ## File formats
