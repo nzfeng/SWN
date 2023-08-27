@@ -113,7 +113,7 @@ From the GUI menu, you can also export curves as [OBJ line elements](https://en.
 
 For better visualization of the solution around curve endpoints, we implemented a projective interpolation (see Figure 4 from the paper.) The Polyscope shader in this program is already set up to perform this special interpolation, so solutions will look already good in the GUI.
 
-When you export a solution, we output texture coordinates for the mesh in _homogeneous coordinates_, where rather than the standard uv coordinates, we output 3-dimensional uvw texture coordinates. To visualize these textures, the 3d coordinates are linearly interpolated across each triangle. Then, for each pixel the first two coordinates are divided by the last coordinate to obtain the final uv texture coordinates. This can be done in a shader, or via shader nodes in Blender -- see `Example.blend` for an example.
+When you export a solution, we output texture coordinates for the mesh in _homogeneous coordinates_. To visualize these textures, the 2d coordinates are linearly interpolated across each triangle. Then, for each pixel the first coordinate is divided by the 2nd coordinate to obtain the final function value. This can be done in a shader, or via shader nodes in Blender -- see `Example.blend` for an example.
 
 ## Visualization
 
