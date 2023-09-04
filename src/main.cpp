@@ -883,6 +883,10 @@ int main(int argc, char** argv) {
 
         polyscope::show();
     }
+    else
+    {
+        solve();
+    }
 
     return EXIT_SUCCESS;
 }
