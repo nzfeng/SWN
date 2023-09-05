@@ -60,9 +60,8 @@ You can pass several arguments to the command line, including some flags which a
 |`--o`, `--output=[meshname]_w.obj`| File to save winding number function to, consisting of the mesh along with homogeneous texture coordinates. |
 |`--r`, `--approximateResidual`| Use reduced-size linear program to approximate the residual function, instead of solving a more expensive LP. Off by default. |
 |`--V`, `--verbose`| Verbose output. |
+|`--h`, `--headless`| Don't use the GUI, and automatically solve for & export the final winding number function. The GUI will be shown by default.|
 |`--help`| Display help |
-
-<!-- |`--h`, `--headless`| Don't use the GUI. The GUI will be shown by default.| -->
 <!-- TODO: Expose all parameters -->
 
 ## File formats
