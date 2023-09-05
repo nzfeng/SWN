@@ -825,6 +825,7 @@ int main(int argc, char** argv) {
 
     // Load mesh
     MESH_FILEPATH = args::get(inputFilename);
+    MESHROOT = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
     DATA_DIR = getHomeDirectory(MESH_FILEPATH); // extract home directory
     std::tie(mesh, geometry) = readSurfaceMesh(MESH_FILEPATH);
     // Read line objects, if they exist in mesh file.
@@ -837,6 +838,8 @@ int main(int argc, char** argv) {
     }
     if (outputFilename) {
         OUTPUT_FILENAME = args::get(outputFilename);
+    } else {
+        OUTPUT_FILENAME = DATA_DIR + MESHROOT + "_w.obj";
     }
     // Read flags.
     if (approximateResidual) {
@@ -845,7 +848,9 @@ int main(int argc, char** argv) {
     if (headless) {
         USING_GUI = false;
     }
-    MESHROOT = polyscope::guessNiceNameFromPath(MESH_FILEPATH);
+    if (verbose) {
+        VERBOSE = true;
+    }
 
     // Initialize solver.
     SWNSolver = std::unique_ptr<SurfaceWindingNumbersSolver>(new SurfaceWindingNumbersSolver(*geometry));
@@ -882,9 +887,7 @@ int main(int argc, char** argv) {
         displayCurves(getGeom(), getCurveHalfedges(), CURVE_NODES, CURVE_EDGES, DUAL_CHAIN);
 
         polyscope::show();
-    }
-    else
-    {
+    } else {
         solve();
     }
 
