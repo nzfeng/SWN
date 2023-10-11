@@ -70,9 +70,9 @@ The input mesh may be an `obj`, `ply`, `off`, or `stl`. See [the geometry-centra
 ## Curve input
 The curve may either be specified within the mesh file, or in a separate file which can be passed as a second command line argument.
 
-If the curve is specified within the mesh file, the curve can be specified as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). A line is specified by the character `l` followed by two or more vertex indices, which indicates that the curve includes an oriented edge between each pair of adjacent vertices. The curve can also be specified as a _dual 1-chain_, using the character `c` followed by two or more faces indices, which indicates that the curve jumps by +1 between each pair of adjacent faces. Using a dual 1-chain is usually not necessary; you might want to use a dual 1-chain only if the surface is non-orientable. **Note:** Since the dual version wasn't part of our original paper, supporting dual 1-chain input is still under construction at the moment.
+If the curve is specified within the mesh file, the curve **must** be specified as [OBJ line elements](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Line_elements). A line is specified by the character `l` followed by two or more vertex indices, which indicates that the curve includes an oriented edge between each pair of adjacent vertices. The curve can also be specified as a _dual 1-chain_, using the character `c` followed by two or more faces indices, which indicates that the curve jumps by +1 between each pair of adjacent faces. Using a dual 1-chain is usually not necessary; you might want to use a dual 1-chain only if the surface is non-orientable. **Note:** Since the dual version wasn't part of our original paper, supporting dual 1-chain input is still under construction at the moment.
 
-If the curve is specified within a separate file, the curve can be specified using barycentric points along the surface. A barycentric point may either be of type "vertex" and specified in the form
+If the curve is specified within a separate file, the curve **must** be specified using barycentric points along the surface. A barycentric point may either be of type "vertex" and specified in the form
 ```
 v [vertex index]
 ```
