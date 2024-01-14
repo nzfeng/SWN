@@ -88,7 +88,7 @@ If some parts of the curve are not constrained to mesh edges, the mesh will be c
 
 Depending on the curve input, the surface may need to be re-meshed for optimal output.
 
-First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If this is the case, the surface will be re-meshed so that the curve lies entirely along mesh edges (with no change to the curve geometry.)
+First, SWN is formulated for curves that conform to mesh edges. However, you can still specify curves generically as sequences of barycentric points along the surface, with the condition that the curve is continuous and linear within each triangle face. If this is the case, the surface will be re-meshed so that the curve lies entirely along mesh edges -- with no change to either the curve or mesh geometry. Only the number of edges/faces, and the connectivity of the mesh will change.
 
 Second, since curve endpoints are omitted from the solve (Section 2.3.2 in the paper), curves that span only one mesh edge would be ignored. Therefore such edges are subdivided so that these parts of the curve will not be ignored.
 
