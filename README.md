@@ -35,9 +35,13 @@ If this code contributes to academic work, please cite as:
 ## Gurobi
 The program relies on Gurobi to solve a linear program, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
 
-To get CMake to find your Gurobi installation, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`.
+This project already has a `cmake` file to help CMake find your Gurobi installation, which lists several likely directories to look inside. However, if your installation is installed in a different place, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`. For example, here is the filepath to the Gurobi installation on my Mac:
 
 ![screenshot of FindGUROBI.cmake file](media/GurobiCmake.png)
+
+Depending on which version of Gurobi you've installed, you may also need to add your version in line 9 -- for example, adding `gurobi 110` for version 1100:
+
+![screenshot of FindGUROBI.cmake file](media/GurobiCmakeVersion.png)
 
 ## Running the program
 ```
