@@ -39,7 +39,7 @@ This project already has a `cmake` file to help CMake find your Gurobi installat
 
 ![screenshot of FindGUROBI.cmake file](media/GurobiCmake.png)
 
-Depending on which version of Gurobi you've installed, you may also need to add your version in line 9 -- for example, adding `gurobi 110` for version 1100:
+Depending on which version of Gurobi you've installed, you may also need to add your version in line 9 -- for example, adding `gurobi 110` for version 11.0:
 
 ![screenshot of FindGUROBI.cmake file](media/GurobiCmakeVersion.png)
 
