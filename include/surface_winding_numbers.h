@@ -9,7 +9,7 @@
 #include "geometrycentral/surface/trace_geodesic.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
 
-#include "gurobi_c++.h"
+#include "ortools/linear_solver/linear_solver.h"
 #include "utils.h"
 
 #include <complex>
@@ -27,6 +27,7 @@
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
+using namespace operations_research;
 
 class SurfaceWindingNumbersSolver {
 
@@ -60,6 +61,8 @@ class SurfaceWindingNumbersSolver {
      * to un-ambiguously specify the curve's sides and orientations on non-manifold or non-orientable meshes. */
     CornerData<double> solve(const std::vector<std::array<Face, 2>>& curve);
 
+    void setLPSolver(const std::string& solverID);
+
     // === Parameters
     double epsilon = 1e-2;
     bool doHomologyCorrection = true;
@@ -76,6 +79,7 @@ class SurfaceWindingNumbersSolver {
     IntrinsicGeometryInterface& geom;
 
     bool simplyConnected;
+    std::string LP_SOLVER = "SCIP";
     HalfedgeData<double> halfedgeCotanWeights;
 
     // === Solvers

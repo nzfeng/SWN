@@ -38,6 +38,7 @@ bool DO_HOMOLOGY_CORRECTION = true;
 bool APPROXIMATE_RESIDUAL = false;
 bool VERBOSE = false;
 std::string OUTPUT_FILENAME = "";
+std::string SOLVER_ID = "SCIP";
 float EPSILON = 1e-2;
 float REFINE_AREA_THRESH = std::numeric_limits<float>::infinity();
 float REFINE_ANGLE_THRESH = 25.;
@@ -529,6 +530,7 @@ void solve() {
             SWNSolver->approximateResidual = APPROXIMATE_RESIDUAL;
             SWNSolver->verbose = VERBOSE;
             SWNSolver->epsilon = EPSILON;
+            SWNSolver->setLPSolver(SOLVER_ID);
             LAST_SOLVE.solverMode = SolverMode::ExtrinsicMesh;
             CornerData<double> w;
             if (DUAL_CHAIN.size() > 0) {
@@ -572,6 +574,7 @@ void solve() {
             intrinsicSolver->approximateResidual = APPROXIMATE_RESIDUAL;
             intrinsicSolver->verbose = VERBOSE;
             intrinsicSolver->epsilon = EPSILON;
+            intrinsicSolver->setLPSolver(SOLVER_ID);
             LAST_SOLVE.solverMode = SolverMode::IntrinsicMesh;
             CornerData<double> w = intrinsicSolver->solve(curveHalfedgesOnIntrinsic);
             if (OUTPUT_FILENAME != "") exportFunction(*intTri, *manifoldGeom, w, OUTPUT_FILENAME);
@@ -798,6 +801,7 @@ int main(int argc, char** argv) {
     args::Positional<std::string> inputFilename(parser, "mesh", "A mesh file.");
     args::ValueFlag<std::string> curveFilename(parser, "curve", "An input curve file", {"curve", "c"});
     args::ValueFlag<std::string> outputFilename(parser, "output", "Output file", {"output", "o"});
+    args::ValueFlag<std::string> solverID(parser, "solverID", "LP solver", {"solver", "s"});
 
     args::Group group(parser);
     args::Flag approximateResidual(group, "approximateResidual", "Use reduced-size linear program.",
@@ -841,6 +845,10 @@ int main(int argc, char** argv) {
     } else {
         OUTPUT_FILENAME = DATA_DIR + MESHROOT + "_w.obj";
     }
+    if (solverID) {
+        SOLVER_ID = args::get(solverID);
+    }
+
     // Read flags.
     if (approximateResidual) {
         APPROXIMATE_RESIDUAL = true;

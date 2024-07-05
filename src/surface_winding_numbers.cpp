@@ -119,6 +119,10 @@ CornerData<double> SurfaceWindingNumbersSolver::solve(const std::vector<std::arr
     return CornerData<double>(mesh, 0);
 }
 
+void SurfaceWindingNumbersSolver::setLPSolver(const std::string& solverID) {
+    LP_SOLVER = solverID;
+}
+
 
 // ==== ALGORITHM STEPS
 
@@ -340,25 +344,28 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     size_t E = mesh.nEdges();
     size_t numVars = F + E; // DOFs + slack variables
 
-    // Set up environment
-    if (verbose) std::cerr << "Setting up Gurobi environment..." << std::endl;
-    GRBEnv env = GRBEnv();
-    GRBModel model = GRBModel(env);
+    if (verbose) std::cerr << "Setting up linear program..." << std::endl;
+    std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver(LP_SOLVER));
+    if (!solver) {
+        throw std::logic_error(LP_SOLVER + " solver unavailable.");
+    }
 
-    // Allocate variables
+    // Allocate variables & set up objective
     if (verbose) std::cerr << "Allocating variables and setting up objective..." << std::endl;
-    std::vector<GRBVar> X(numVars);
+    const double infinity = solver->infinity();
+    std::vector<const MPVariable*> X(numVars);
+    MPObjective* const objective = solver->MutableObjective();
     geom.requireEdgeLengths();
     for (size_t i = 0; i < F; i++) {
-        X[i] = model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS); // lb, ub, obj, vtype, vname=""
+        X[i] = solver->MakeNumVar(-infinity, infinity, "");
     }
     for (size_t i = 0; i < E; i++) {
         double cMag = abs(chain[i]);
         double coeff = (cMag < 1e-5) ? 1. : epsilon;
-        // Add lower bound to enforce that the slack variables are positive.
-        X[F + i] = model.addVar(0., GRB_INFINITY, coeff * geom.edgeLengths[i], GRB_CONTINUOUS);
+        X[F + i] = solver->MakeNumVar(0, infinity, "");
+        objective->SetCoefficient(X[F + i], coeff * geom.edgeLengths[i]);
     }
-    model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
+    objective->SetMinimization();
 
     // Set up constraints
     if (verbose) std::cerr << "Setting up constraints..." << std::endl;
@@ -374,42 +381,39 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
         double diff = vInit[he.corner()] - vInit[he.twin().next().corner()];
 
         // Constraints to define the slack variables.
-        model.addConstr(-X[F + i] <= diff + X[fA] - X[fB]); // -z - Cij*mu <= 0
-        model.addConstr(X[F + i] >= diff + X[fA] - X[fB]);  // z - Cij*mu >= 0
+        MPConstraint* c0 = solver->MakeRowConstraint(-infinity, diff, "");
+        c0->SetCoefficient(X[F + i], -1);
+        c0->SetCoefficient(X[fA], -1);
+        c0->SetCoefficient(X[fB], 1);
+        MPConstraint* c1 = solver->MakeRowConstraint(diff, infinity, "");
+        c0->SetCoefficient(X[F + i], 1);
+        c0->SetCoefficient(X[fA], -1);
+        c0->SetCoefficient(X[fB], 1);
 
         // Add constraint so that for each edge that was originally in the curve, the jump in v is at most jump in u
         // ("no extra loops" constraint).
         double gij = chain[i];
-        model.addConstr(0 <= gij * (diff + X[fA] - X[fB]));         // Gij Cij*mu >= 0
-        model.addConstr(gij * (diff + X[fA] - X[fB]) <= gij * gij); // Gij Cij*mu <= Gij * Gij
+        MPConstraint* c3 = solver->MakeRowConstraint(-gij * diff, infinity, "");
+        c3->SetCoefficient(X[fA], gij);
+        c3->SetCoefficient(X[fB], -gij);
+        MPConstraint* c4 = solver->MakeRowConstraint(-infinity, gij * gij - gij * diff, "");
+        c4->SetCoefficient(X[fA], gij);
+        c4->SetCoefficient(X[fB], -gij);
     }
     geom.unrequireFaceIndices();
 
     if (verbose) std::cerr << "Solving..." << std::endl;
-    try {
-        model.optimize();
-        int optimstatus = model.get(GRB_IntAttr_Status);
-        if (optimstatus == GRB_OPTIMAL) {
-            std::cout << "Optimal objective: " << model.get(GRB_DoubleAttr_ObjVal) << std::endl;
-        } else if (optimstatus == GRB_INFEASIBLE) {
-            std::cout << "Model is infeasible" << std::endl;
-        } else if (optimstatus == GRB_UNBOUNDED) {
-            std::cout << "Model is unbounded" << std::endl;
-        } else {
-            std::cout << "Optimization was stopped with status = " << optimstatus << std::endl;
-        }
-    } catch (GRBException e) {
-        std::cout << "Error code = " << e.getErrorCode() << std::endl;
-        std::cout << e.getMessage() << std::endl;
-    } catch (...) {
-        std::cout << "Error during optimization" << std::endl;
+    const MPSolver::ResultStatus result_status = solver->Solve();
+    if (result_status != MPSolver::OPTIMAL) {
+        std::cerr << "The LP does not have an optimal solution!" << std::endl;
     }
+    std::cerr << "Optimal objective: " << objective->Value() << std::endl;
 
     // Reconstruct solution using shifts solved for from LP.
     CornerData<double> vPost = vInit; // v post-shift
     for (size_t i = 0; i < F; i++) {
         Face f = mesh.face(i);
-        double shift = X[i].get(GRB_DoubleAttr_X);
+        double shift = X[i]->solution_value();
         for (Corner c : f.adjacentCorners()) vPost[c] += shift;
     }
 
@@ -494,22 +498,27 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
 
     // Run reduced-size LP, where [# of DOFs] = [# of connected components].
     size_t numVars = nComponents + reIdx; // DOFs + slack variables
-    if (verbose) std::cerr << "Setting up Gurobi environment..." << std::endl;
-    GRBEnv env = GRBEnv();
-    GRBModel model = GRBModel(env);
+    if (verbose) std::cerr << "Setting up reduced linear program..." << std::endl;
+    std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver(LP_SOLVER));
+    if (!solver) {
+        throw std::logic_error(LP_SOLVER + " solver unavailable.");
+    }
 
     // Allocate variables
     if (verbose) std::cerr << "Allocating variables and setting up objective..." << std::endl;
-    std::vector<GRBVar> X(numVars);
+    const double infinity = solver->infinity();
+    std::vector<const MPVariable*> X(numVars);
+    MPObjective* const objective = solver->MutableObjective();
     geom.requireEdgeLengths();
     for (size_t i = 0; i < nComponents; i++) {
-        X[i] = model.addVar(-GRB_INFINITY, GRB_INFINITY, 0., GRB_CONTINUOUS);
+        X[i] = solver->MakeNumVar(-infinity, infinity, "");
     }
     for (size_t i = 0; i < reIdx; i++) {
         // Add lower bound to enforce that the slack variables are positive.
-        X[nComponents + i] = model.addVar(0., GRB_INFINITY, geom.edgeLengths[bEdges[i]], GRB_CONTINUOUS);
+        X[nComponents + i] = solver->MakeNumVar(0, infinity, "");
+        objective->SetCoefficient(X[nComponents + i], geom.edgeLengths[bEdges[i]]);
     }
-    model.set(GRB_IntAttr_ModelSense, GRB_MINIMIZE);
+    objective->SetMinimization();
 
     // Set up constraints
     if (verbose) std::cerr << "Setting up constraints..." << std::endl;
@@ -527,35 +536,28 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
         double diff = 0.5 * ((vInit[c0] - vInit[d0]) + (vInit[c1] - vInit[d1])); // average diff
 
         // Constraints to define the slack variables.
-        model.addConstr(-X[nComponents + i] <= diff + X[r0] - X[r1]);
-        model.addConstr(X[nComponents + i] >= diff + X[r0] - X[r1]);
+        MPConstraint* ct0 = solver->MakeRowConstraint(-infinity, diff, "");
+        ct0->SetCoefficient(X[nComponents + i], -1);
+        ct0->SetCoefficient(X[r0], -1);
+        ct0->SetCoefficient(X[r1], 1);
+        MPConstraint* ct1 = solver->MakeRowConstraint(diff, infinity, "");
+        ct1->SetCoefficient(X[nComponents + i], 1);
+        ct1->SetCoefficient(X[r0], -1);
+        ct1->SetCoefficient(X[r1], 1);
     }
     geom.unrequireFaceIndices();
 
     if (verbose) std::cerr << "Solving..." << std::endl;
-    try {
-        model.optimize();
-        int optimstatus = model.get(GRB_IntAttr_Status);
-        if (optimstatus == GRB_OPTIMAL) {
-            std::cout << "Optimal objective: " << model.get(GRB_DoubleAttr_ObjVal) << std::endl;
-        } else if (optimstatus == GRB_INFEASIBLE) {
-            std::cout << "Model is infeasible" << std::endl;
-        } else if (optimstatus == GRB_UNBOUNDED) {
-            std::cout << "Model is unbounded" << std::endl;
-        } else {
-            std::cout << "Optimization was stopped with status = " << optimstatus << std::endl;
-        }
-    } catch (GRBException e) {
-        std::cout << "Error code = " << e.getErrorCode() << std::endl;
-        std::cout << e.getMessage() << std::endl;
-    } catch (...) {
-        std::cout << "Error during optimization" << std::endl;
+    const MPSolver::ResultStatus result_status = solver->Solve();
+    if (result_status != MPSolver::OPTIMAL) {
+        std::cerr << "The LP does not have an optimal solution!" << std::endl;
     }
+    std::cerr << "Optimal objective: " << objective->Value() << std::endl;
 
     // Reconstruct solution using shifts solved for from LP.
     CornerData<double> vPost = vInit; // v post-shift
     for (size_t i = 0; i < nComponents; i++) {
-        double shift = X[i].get(GRB_DoubleAttr_X);
+        double shift = X[i]->solution_value();
         for (Face f : mesh.faces()) {
             if (visitedFace[f] != i + 1) continue;
             for (Corner c : f.adjacentCorners()) vPost[c] += shift;
