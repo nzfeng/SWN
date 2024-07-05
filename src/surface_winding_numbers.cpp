@@ -344,7 +344,7 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
     size_t E = mesh.nEdges();
     size_t numVars = F + E; // DOFs + slack variables
 
-    if (verbose) std::cerr << "Setting up linear program..." << std::endl;
+    if (verbose) std::cerr << "Setting up linear program using " << LP_SOLVER << "..." << std::endl;
     std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver(LP_SOLVER));
     if (!solver) {
         throw std::logic_error(LP_SOLVER + " solver unavailable.");
@@ -386,19 +386,19 @@ CornerData<double> SurfaceWindingNumbersSolver::solveLinearProgram(const Vector<
         c0->SetCoefficient(X[fA], -1);
         c0->SetCoefficient(X[fB], 1);
         MPConstraint* c1 = solver->MakeRowConstraint(diff, infinity, "");
-        c0->SetCoefficient(X[F + i], 1);
-        c0->SetCoefficient(X[fA], -1);
-        c0->SetCoefficient(X[fB], 1);
+        c1->SetCoefficient(X[F + i], 1);
+        c1->SetCoefficient(X[fA], -1);
+        c1->SetCoefficient(X[fB], 1);
 
         // Add constraint so that for each edge that was originally in the curve, the jump in v is at most jump in u
         // ("no extra loops" constraint).
         double gij = chain[i];
-        MPConstraint* c3 = solver->MakeRowConstraint(-gij * diff, infinity, "");
+        MPConstraint* c2 = solver->MakeRowConstraint(-gij * diff, infinity, "");
+        c2->SetCoefficient(X[fA], gij);
+        c2->SetCoefficient(X[fB], -gij);
+        MPConstraint* c3 = solver->MakeRowConstraint(-infinity, gij * gij - gij * diff, "");
         c3->SetCoefficient(X[fA], gij);
         c3->SetCoefficient(X[fB], -gij);
-        MPConstraint* c4 = solver->MakeRowConstraint(-infinity, gij * gij - gij * diff, "");
-        c4->SetCoefficient(X[fA], gij);
-        c4->SetCoefficient(X[fB], -gij);
     }
     geom.unrequireFaceIndices();
 
@@ -498,7 +498,7 @@ SurfaceWindingNumbersSolver::approximateResidualFunction(const Vector<double>& i
 
     // Run reduced-size LP, where [# of DOFs] = [# of connected components].
     size_t numVars = nComponents + reIdx; // DOFs + slack variables
-    if (verbose) std::cerr << "Setting up reduced linear program..." << std::endl;
+    if (verbose) std::cerr << "Setting up reduced linear program using " << LP_SOLVER << "..." << std::endl;
     std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver(LP_SOLVER));
     if (!solver) {
         throw std::logic_error(LP_SOLVER + " solver unavailable.");

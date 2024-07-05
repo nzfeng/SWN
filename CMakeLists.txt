@@ -101,6 +101,7 @@ target_compile_features(main PUBLIC cxx_std_17)
 # add the args.hxx project which we use for command line args
 target_include_directories(main PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/polyscope/deps/args")
 target_link_libraries(main geometry-central polyscope ortools::ortools)
+message(STATUS "${GUROBI_HOME}")
 message(STATUS "${GUROBI_CXX_LIBRARY}")
 message(STATUS "${GUROBI_CXX_DEBUG_LIBRARY}")
 target_link_libraries(main optimized ${GUROBI_CXX_LIBRARY} debug ${GUROBI_CXX_DEBUG_LIBRARY})

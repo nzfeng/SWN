@@ -847,6 +847,8 @@ int main(int argc, char** argv) {
     }
     if (solverID) {
         SOLVER_ID = args::get(solverID);
+        std::transform(SOLVER_ID.begin(), SOLVER_ID.end(), SOLVER_ID.begin(),
+                       [](unsigned char c) { return std::toupper(c); });
     }
 
     // Read flags.

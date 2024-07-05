@@ -48,7 +48,7 @@ The `main` branch of this repo relies on Gurobi to solve a linear program. While
 
 If 100% open-source code is a necessity, you may use the `open-source-lp` branch of this repo, which uses [OR-Tools](https://developers.google.com/optimization). OR-Tools is open-source software that includes wrappers around [several possible solvers](https://developers.google.com/optimization/lp/lp_advanced):
 
-![screenshot of OR-Tool's supported LP solvers, available on https://developers.google.com/optimization/lp/lp_advanced](media/OR-Tools_LPSolvers.png) 
+<img src="media/OR-Tools_LPSolvers.png" width="70%"/>
 
 Install OR-Tools by following the OR-Tools documentation [here](https://developers.google.com/optimization/install/cpp). 
 
@@ -58,11 +58,11 @@ cmake .. -DUSE_COINOR=ON
 ```
 before running `make`. See the documentation [linked above](https://github.com/google/or-tools/blob/stable/cmake/README.md) for the full list of command-line options for enabling solvers.
 
-Finally, you must also specify the solver when running `make`, using a `--s` or `--solver` flag, for example
+Finally, you must also specify the solver when running the executable, using a `--s` or `--solver` flag, for example
 ```
-make -j --s=CLP
+bin/main [path/to/mesh] --c=[path/to/curve] --s=CLP
 ```
-The possible values are `CLP`, `CPLEX_LP`, `GLOP`, `GLPK_LP`, `GUROBI_LP`, `PDLP`, and `SCIP`, `XPRESS_LP` (case-insensitive). By default, `SCIP` will be used.
+The possible values (case-insensitive) are `CLP`, `CPLEX_LP`, `GLOP`, `GLPK_LP`, `GUROBI_LP`, `PDLP`, and `SCIP`, `XPRESS_LP`. By default, `SCIP` will be used.
 
 ### Gurobi
 The `main` branch of this repo relies on Gurobi to solve a linear program, where you should first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
