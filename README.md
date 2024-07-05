@@ -32,17 +32,6 @@ If this code contributes to academic work, please cite as:
 
 # Getting started
 
-## Gurobi
-The program relies on Gurobi to solve a linear program, so you must first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
-
-This project already has a `cmake` file to help CMake find your Gurobi installation, which lists several likely directories to look inside. However, if your installation is installed in a different place, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`. For example, here is the filepath to the Gurobi installation on my Mac:
-
-![screenshot of FindGUROBI.cmake file](media/GurobiCmake.png)
-
-Depending on which version of Gurobi you've installed, you may also need to add your version in line 9 -- for example, adding `gurobi 110` for version 11.0:
-
-![screenshot of FindGUROBI.cmake file](media/GurobiCmakeVersion.png)
-
 ## Running the program
 ```
 git clone --recursive https://github.com/nzfeng/SWN.git
@@ -53,6 +42,38 @@ make -j8 # or however many cores you want to use
 bin/main /path/to/mesh --c=/path/to/curve
 ```
 A Polyscope GUI will open.
+
+## Dependencies (linear program solvers)
+The `main` branch of this repo relies on Gurobi to solve a linear program. While Gurobi has good performance, it is a commercial (not open source) solver (though free temporary licenses are available.) If you want to use Gurobi, see the section below. 
+
+If 100% open-source code is a necessity, you may use the `open-source-lp` branch of this repo, which uses [OR-Tools](https://developers.google.com/optimization). OR-Tools is open-source software that includes wrappers around [several possible solvers](https://developers.google.com/optimization/lp/lp_advanced):
+
+<img src="media/OR-Tools_LPSolvers.png" width="70%"/>
+
+Install OR-Tools by following the OR-Tools documentation [here](https://developers.google.com/optimization/install/cpp). 
+
+Which solver is used to solve the linear program will depend on what you have installed locally, and what command-line option you use. Full documentation on how to specify the solver is [here](https://github.com/google/or-tools/blob/stable/cmake/README.md). For instance, if you want to use COIN-OR's CLP solver, inside the `[project]/build` directory run
+```
+cmake .. -DUSE_COINOR=ON
+```
+before running `make`. See the documentation [linked above](https://github.com/google/or-tools/blob/stable/cmake/README.md) for the full list of command-line options for enabling solvers.
+
+Finally, you must also specify the solver when running the executable, using a `--s` or `--solver` flag, for example
+```
+bin/main [path/to/mesh] --c=[path/to/curve] --s=CLP
+```
+The possible values (case-insensitive) are `CLP`, `CPLEX_LP`, `GLOP`, `GLPK_LP`, `GUROBI_LP`, `PDLP`, and `SCIP`, `XPRESS_LP`. By default, `SCIP` will be used.
+
+### Gurobi
+The `main` branch of this repo relies on Gurobi to solve a linear program, where you should first install [Gurobi](https://www.gurobi.com/). Those affiliated with an university can get the academic version for free. Otherwise, a free trial is available.
+
+This project already has a `cmake` file to help CMake find your Gurobi installation, which lists several likely directories to look inside. However, if your installation is installed in a different place, you may need to change the path in Line 1 of `cmake/modules/FindGUROBI.cmake`. For example, here is the filepath to the Gurobi installation on my Mac:
+
+![screenshot of FindGUROBI.cmake file](media/GurobiCmake.png)
+
+Depending on which version of Gurobi you've installed, you may also need to add your version in line 9 -- for example, adding `gurobi 110` for version 11.0:
+
+![screenshot of FindGUROBI.cmake file](media/GurobiCmakeVersion.png)
 
 # Usage
 
